@@ -1,0 +1,4 @@
+sda
+├─sda1 ext4 /
+└─sda2 crypto_LUKS
+  └─secure ext4 /secure

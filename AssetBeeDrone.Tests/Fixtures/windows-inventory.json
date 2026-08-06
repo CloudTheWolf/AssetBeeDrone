@@ -1,0 +1,68 @@
+{
+  "DeviceName": "WIN-TEST",
+  "SerialNumber": "ABC123",
+  "SystemManufacturer": "Dell Inc.",
+  "SystemSku": "Latitude_5520",
+  "SystemModel": "Latitude 5520",
+  "OsName": "Microsoft Windows 11 Pro",
+  "OsVersion": "10.0.26100",
+  "OsDisplayVersion": "24H2",
+  "OsBuild": "26100",
+  "Cpu": {
+    "Name": "Test CPU",
+    "Cores": 4,
+    "LogicalProcessors": 8
+  },
+  "MemoryBytes": 17179869184,
+  "Domain": "example.test",
+  "DomainJoined": true,
+  "JoinStatus": "AzureAdJoined : YES\nTenantName : Example Workspace",
+  "Disks": [
+    {
+      "DeviceId": "C:",
+      "Size": 1000000,
+      "FreeSpace": 500000,
+      "FileSystem": "NTFS"
+    }
+  ],
+  "Encryption": [
+    {
+      "MountPoint": "C:",
+      "Status": "FullyEncrypted",
+      "RecoveryKeys": ["111111-222222-333333-444444-555555-666666-777777-888888"],
+      "KeyProtectors": [
+        {
+          "KeyProtectorId": "{11111111-2222-3333-4444-555555555555}",
+          "RecoveryKey": "111111-222222-333333-444444-555555-666666-777777-888888"
+        }
+      ]
+    }
+  ],
+  "BitLockerAvailable": true,
+  "GcpwInstalled": true,
+  "Antivirus": [
+    {
+      "Name": "Windows Defender",
+      "ProductState": 397568
+    }
+  ],
+  "Updates": {
+    "Installed": [
+      {
+        "Id": "KB5034441",
+        "Title": "Security Update",
+        "Category": "Security Update",
+        "InstalledAtUtc": "2026-01-15T00:00:00.0000000Z",
+        "KbArticle": "KB5034441"
+      }
+    ],
+    "Available": [
+      {
+        "Id": "update-1",
+        "Title": "2026-02 Cumulative Update for Windows 11",
+        "Category": "Security Updates",
+        "KbArticle": "KB5041234"
+      }
+    ]
+  }
+}

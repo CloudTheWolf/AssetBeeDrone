@@ -1,0 +1,12 @@
+Drone__Endpoint=https://inventory.example.com/api/v1/inventory
+Drone__CollectionIntervalMinutes=360
+Drone__RequestTimeoutSeconds=30
+Drone__MaxRetryAttempts=3
+# Optional: hardware or virtualware. Leave blank for automatic detection.
+Drone__Type=
+# Set exactly one authentication value and protect this file with mode 0600.
+Drone__BearerToken=
+# Drone__ApiKey=
+# Debug writes the full outbound JSON (including BitLocker keys) to disk.
+Drone__Debug=false
+Drone__DebugOutputPath=/var/tmp/assetbee-drone-inventory-debug.json

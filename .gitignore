@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+.idea/
+TestResults/
+*.user
+*.suo
+appsettings.*.json
+!appsettings.json
+inventory-debug.json
+inventory-debug*.json

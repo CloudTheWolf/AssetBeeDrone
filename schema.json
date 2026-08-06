@@ -1,0 +1,386 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assetbee.local/schemas/device-inventory.schema.json",
+  "title": "AssetBee Drone Device Inventory",
+  "description": "Outbound inventory payload posted by AssetBee Drone (schemaVersion 1.0).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "collectedAtUtc",
+    "platform",
+    "type",
+    "hardwareType",
+    "deviceName",
+    "serialNumber",
+    "manufacturer",
+    "model",
+    "operatingSystem",
+    "cpu",
+    "memory",
+    "disks",
+    "diskEncryption",
+    "domainWorkspace",
+    "loginProviders",
+    "antivirus",
+    "updates"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "collectedAtUtc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the inventory was collected."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["windows", "linux", "macos"]
+    },
+    "type": {
+      "type": "string",
+      "enum": ["hardware", "virtualware"]
+    },
+    "hardwareType": {
+      "$ref": "#/$defs/probeHardwareType"
+    },
+    "deviceName": { "$ref": "#/$defs/probeString" },
+    "serialNumber": { "$ref": "#/$defs/probeString" },
+    "manufacturer": { "$ref": "#/$defs/probeString" },
+    "model": { "$ref": "#/$defs/probeString" },
+    "operatingSystem": { "$ref": "#/$defs/probeOperatingSystemInfo" },
+    "cpu": { "$ref": "#/$defs/probeCpuInfo" },
+    "memory": { "$ref": "#/$defs/probeMemoryInfo" },
+    "disks": { "$ref": "#/$defs/probeDiskInfoArray" },
+    "diskEncryption": { "$ref": "#/$defs/probeEncryptionVolumeArray" },
+    "domainWorkspace": { "$ref": "#/$defs/probeDomainWorkspaceInfo" },
+    "loginProviders": { "$ref": "#/$defs/probeLoginProviderInfoArray" },
+    "antivirus": { "$ref": "#/$defs/probeAntivirusInfoArray" },
+    "updates": { "$ref": "#/$defs/probeUpdateInventory" }
+  },
+  "$defs": {
+    "probeStatus": {
+      "type": "string",
+      "enum": [
+        "available",
+        "unavailable",
+        "unsupported",
+        "accessDenied",
+        "error"
+      ]
+    },
+    "probeString": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": { "type": ["string", "null"] },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "probeHardwareType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "type": ["string", "null"],
+          "enum": ["laptop", "desktop", "server", null]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "operatingSystemInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "displayVersion": { "type": ["string", "null"] },
+        "build": { "type": ["string", "null"] },
+        "kernel": { "type": ["string", "null"] }
+      }
+    },
+    "probeOperatingSystemInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            { "$ref": "#/$defs/operatingSystemInfo" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "cpuInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "logicalProcessors"],
+      "properties": {
+        "model": { "type": "string" },
+        "logicalProcessors": { "type": "integer", "minimum": 1 },
+        "physicalCores": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "probeCpuInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            { "$ref": "#/$defs/cpuInfo" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "memoryInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["totalBytes"],
+      "properties": {
+        "totalBytes": { "type": "integer", "minimum": 0 },
+        "availableBytes": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "probeMemoryInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            { "$ref": "#/$defs/memoryInfo" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "diskInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "totalBytes"],
+      "properties": {
+        "name": { "type": "string" },
+        "mountPoint": { "type": ["string", "null"] },
+        "totalBytes": { "type": "integer", "minimum": 0 },
+        "availableBytes": { "type": ["integer", "null"], "minimum": 0 },
+        "fileSystem": { "type": ["string", "null"] }
+      }
+    },
+    "probeDiskInfoArray": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/diskInfo" }
+            },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "bitLockerKeyProtector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyProtectorId"],
+      "properties": {
+        "keyProtectorId": { "type": "string" },
+        "recoveryKey": { "type": ["string", "null"] }
+      }
+    },
+    "encryptionVolume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["volume", "technology", "state"],
+      "properties": {
+        "volume": { "type": "string" },
+        "technology": { "type": "string" },
+        "state": { "type": "string" },
+        "recoveryKeys": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" } },
+            { "type": "null" }
+          ]
+        },
+        "keyProtectors": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/bitLockerKeyProtector" }
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "probeEncryptionVolumeArray": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/encryptionVolume" }
+            },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "domainWorkspaceInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domain": { "type": ["string", "null"] },
+        "domainJoined": { "type": ["boolean", "null"] },
+        "workspace": { "type": ["string", "null"] },
+        "workspaceJoined": { "type": ["boolean", "null"] }
+      }
+    },
+    "probeDomainWorkspaceInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            { "$ref": "#/$defs/domainWorkspaceInfo" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "loginProviderInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "state"],
+      "properties": {
+        "name": { "type": "string" },
+        "state": { "type": "string" },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "probeLoginProviderInfoArray": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/loginProviderInfo" }
+            },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "antivirusInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "state"],
+      "properties": {
+        "name": { "type": "string" },
+        "state": { "type": "string" },
+        "enabled": { "type": ["boolean", "null"] },
+        "upToDate": { "type": ["boolean", "null"] },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "probeAntivirusInfoArray": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/antivirusInfo" }
+            },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "softwareUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": ["string", "null"] },
+        "installedAtUtc": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        },
+        "kbArticle": { "type": ["string", "null"] }
+      }
+    },
+    "updateInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["installed", "available"],
+      "properties": {
+        "installed": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/softwareUpdate" }
+        },
+        "available": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/softwareUpdate" }
+        }
+      }
+    },
+    "probeUpdateInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            { "$ref": "#/$defs/updateInventory" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

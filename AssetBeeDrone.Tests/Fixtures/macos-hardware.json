@@ -1,0 +1,11 @@
+{
+  "SPHardwareDataType": [
+    {
+      "machine_model": "MacTest1,1",
+      "chip_type": "Apple M Test",
+      "number_processors": "8",
+      "total_number_cores": "8",
+      "serial_number": "MAC123"
+    }
+  ]
+}
