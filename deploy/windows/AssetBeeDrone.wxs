@@ -74,7 +74,7 @@
       </Component>
     </ComponentGroup>
 
-    <!-- Type 50: deferred CA command line comes from the property of the same name. -->
+    <!-- Deferred QuietExec: command line is CustomActionData (property Id == CA Id). -->
     <SetProperty
         Id="WriteAppSettings"
         Sequence="execute"
@@ -83,7 +83,8 @@
 
     <CustomAction
         Id="WriteAppSettings"
-        Property="WriteAppSettings"
+        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+        DllEntry="WixQuietExec"
         Execute="deferred"
         Impersonate="no"
         Return="check" />
