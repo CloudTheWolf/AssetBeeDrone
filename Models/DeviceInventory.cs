@@ -64,6 +64,29 @@ public sealed record UpdateInventory(
     IReadOnlyList<SoftwareUpdate> Installed,
     IReadOnlyList<SoftwareUpdate> Available);
 
+public sealed record SbomComponent(
+    string Name,
+    string? Version = null,
+    string Type = "library",
+    string? Purl = null,
+    string? Publisher = null);
+
+public sealed record SbomTarget(
+    string BomRef,
+    string Kind,
+    string Name,
+    IReadOnlyList<SbomComponent> Components,
+    string? Version = null,
+    string? Image = null,
+    string? ContainerId = null,
+    string? Detail = null);
+
+public sealed record SbomInventory(
+    string Format,
+    string SpecVersion,
+    DateTimeOffset GeneratedAtUtc,
+    IReadOnlyList<SbomTarget> Targets);
+
 public sealed record DomainWorkspaceInfo(
     string? Domain,
     bool? DomainJoined,
@@ -95,7 +118,8 @@ public sealed record DeviceInventory(
     ProbeValue<DomainWorkspaceInfo> DomainWorkspace,
     ProbeValue<IReadOnlyList<LoginProviderInfo>> LoginProviders,
     ProbeValue<IReadOnlyList<AntivirusInfo>> Antivirus,
-    ProbeValue<UpdateInventory> Updates)
+    ProbeValue<UpdateInventory> Updates,
+    ProbeValue<SbomInventory> Sbom)
 {
     public string Type { get; init; } = "hardware";
 

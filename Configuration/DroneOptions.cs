@@ -40,6 +40,16 @@ public sealed class DroneOptions
     /// </summary>
     public string DebugOutputPath { get; set; } = "inventory-debug.json";
 
+    /// <summary>
+    /// When true, generates a CycloneDX-style SBOM for the host OS packages.
+    /// </summary>
+    public bool IncludeSbom { get; set; } = true;
+
+    /// <summary>
+    /// When true on Linux, also generates SBOMs for running Docker containers.
+    /// </summary>
+    public bool IncludeContainerSboms { get; set; } = true;
+
     public TimeSpan CollectionInterval => TimeSpan.FromMinutes(CollectionIntervalMinutes);
 
     public TimeSpan RequestTimeout => TimeSpan.FromSeconds(RequestTimeoutSeconds);

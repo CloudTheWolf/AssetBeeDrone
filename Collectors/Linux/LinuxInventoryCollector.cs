@@ -1,16 +1,20 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using AssetBeeDrone.Configuration;
 using AssetBeeDrone.Infrastructure;
 using AssetBeeDrone.Models;
+using Microsoft.Extensions.Options;
 
 namespace AssetBeeDrone.Collectors.Linux;
 
 public sealed partial class LinuxInventoryCollector(
     IProcessRunner processRunner,
-    TimeProvider timeProvider) : InventoryCollectorBase, IDeviceInventoryCollector
+    TimeProvider timeProvider,
+    IOptions<DroneOptions> options) : InventoryCollectorBase, IDeviceInventoryCollector
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan UpdateProbeTimeout = TimeSpan.FromSeconds(45);
+    private readonly DroneOptions _options = options.Value;
 
     public async Task<DeviceInventory> CollectAsync(CancellationToken cancellationToken)
     {
@@ -22,9 +26,15 @@ public sealed partial class LinuxInventoryCollector(
         Task<ProbeValue<IReadOnlyList<AntivirusInfo>>> antivirusTask =
             CollectAntivirusAsync(cancellationToken);
         Task<ProbeValue<UpdateInventory>> updatesTask = CollectUpdatesAsync(cancellationToken);
+        Task<ProbeValue<SbomInventory>> sbomTask = SbomCollector.CollectLinuxAsync(
+            processRunner,
+            timeProvider,
+            _options.IncludeSbom,
+            _options.IncludeContainerSboms,
+            cancellationToken);
 
         await Task.WhenAll(
-            operatingSystemTask, encryptionTask, domainTask, antivirusTask, updatesTask);
+            operatingSystemTask, encryptionTask, domainTask, antivirusTask, updatesTask, sbomTask);
 
         return new DeviceInventory(
             "1.0",
@@ -42,7 +52,8 @@ public sealed partial class LinuxInventoryCollector(
             await domainTask,
             CollectLoginProviders(),
             await antivirusTask,
-            await updatesTask);
+            await updatesTask,
+            await sbomTask);
     }
 
     private static ProbeValue<string> CollectSerial()

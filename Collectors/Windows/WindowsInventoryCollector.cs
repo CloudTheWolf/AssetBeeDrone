@@ -1,32 +1,41 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AssetBeeDrone.Configuration;
 using AssetBeeDrone.Infrastructure;
 using AssetBeeDrone.Models;
+using Microsoft.Extensions.Options;
 
 namespace AssetBeeDrone.Collectors.Windows;
 
 public sealed partial class WindowsInventoryCollector(
     IProcessRunner processRunner,
-    TimeProvider timeProvider) : InventoryCollectorBase, IDeviceInventoryCollector
+    TimeProvider timeProvider,
+    IOptions<DroneOptions> options) : InventoryCollectorBase, IDeviceInventoryCollector
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(120);
+    private readonly DroneOptions _options = options.Value;
 
     public async Task<DeviceInventory> CollectAsync(CancellationToken cancellationToken)
     {
-        ProcessResult result = await processRunner.RunAsync(
+        Task<ProcessResult> inventoryTask = processRunner.RunAsync(
             "powershell.exe",
             ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                 "-Command", InventoryScript],
             ProbeTimeout,
             cancellationToken);
+        Task<ProbeValue<SbomInventory>> sbomTask = SbomCollector.CollectWindowsAsync(
+            processRunner, timeProvider, _options.IncludeSbom, cancellationToken);
+
+        ProcessResult result = await inventoryTask;
+        ProbeValue<SbomInventory> sbom = await sbomTask;
 
         if (!result.Succeeded)
         {
             string detail = result.TimedOut
                 ? "The Windows inventory probe timed out."
                 : "The Windows inventory probe could not be completed.";
-            return FailedInventory(detail);
+            return FailedInventory(detail, sbom);
         }
 
         try
@@ -53,15 +62,16 @@ public sealed partial class WindowsInventoryCollector(
                 ParseDomain(root),
                 ParseLoginProviders(root),
                 ParseAntivirus(root),
-                ParseUpdates(root));
+                ParseUpdates(root),
+                sbom);
         }
         catch (JsonException)
         {
-            return FailedInventory("The Windows inventory probe returned invalid data.");
+            return FailedInventory("The Windows inventory probe returned invalid data.", sbom);
         }
     }
 
-    private DeviceInventory FailedInventory(string detail) => new(
+    private DeviceInventory FailedInventory(string detail, ProbeValue<SbomInventory> sbom) => new(
         "1.0",
         timeProvider.GetUtcNow(),
         "windows",
@@ -77,8 +87,8 @@ public sealed partial class WindowsInventoryCollector(
         ProbeValue<DomainWorkspaceInfo>.Error(detail),
         ProbeValue<IReadOnlyList<LoginProviderInfo>>.Error(detail),
         ProbeValue<IReadOnlyList<AntivirusInfo>>.Error(detail),
-        ProbeValue<UpdateInventory>.Error(detail));
-
+        ProbeValue<UpdateInventory>.Error(detail),
+        sbom);
     private static ProbeValue<string> AvailableString(JsonElement root, string name)
     {
         string? value = GetString(root, name);

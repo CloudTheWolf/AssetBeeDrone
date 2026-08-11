@@ -1,0 +1,107 @@
+name: Release packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            publish_dir: bin/Release/net10.0/win-x64/publish
+          - os: ubuntu-latest
+            rid: linux-x64
+            publish_dir: bin/Release/net10.0/linux-x64/publish
+          - os: ubuntu-24.04-arm
+            rid: linux-arm64
+            publish_dir: bin/Release/net10.0/linux-arm64/publish
+          - os: macos-latest
+            rid: osx-arm64
+            publish_dir: bin/Release/net10.0/osx-arm64/publish
+          - os: macos-13
+            rid: osx-x64
+            publish_dir: bin/Release/net10.0/osx-x64/publish
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Native AOT
+        run: dotnet publish AssetBeeDrone.csproj -c Release -p:PublishProfile=${{ matrix.rid }}
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev rpm
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./deploy/packaging/build-archive.ps1 `
+            -PublishDirectory '${{ matrix.publish_dir }}' `
+            -Rid '${{ matrix.rid }}'
+          ./deploy/windows/build-msi.ps1 `
+            -PublishDirectory '${{ matrix.publish_dir }}'
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x deploy/packaging/*.sh \
+            deploy/linux/*.sh \
+            deploy/linux/packaging/*.sh \
+            deploy/linux/packaging/deb/DEBIAN/* \
+            deploy/macos/*.sh \
+            deploy/macos/packaging/*.sh \
+            deploy/macos/packaging/scripts/postinstall
+          ./deploy/packaging/build.sh \
+            --rid '${{ matrix.rid }}' \
+            --publish-dir '${{ matrix.publish_dir }}'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AssetBee.Drone-${{ matrix.rid }}
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Stage release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.msi' -o -name '*.deb' -o -name '*.rpm' -o -name '*.pkg' -o -name '*.zip' -o -name '*.tar.gz' \) \
+            -exec cp {} release/ \;
+          ls -la release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

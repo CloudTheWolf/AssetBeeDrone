@@ -142,7 +142,18 @@ public sealed class ReportingAndConfigurationTests
             new DomainWorkspaceInfo(null, false, null, false)),
         ProbeValue<IReadOnlyList<LoginProviderInfo>>.Available([]),
         ProbeValue<IReadOnlyList<AntivirusInfo>>.Available([]),
-        ProbeValue<UpdateInventory>.Available(new UpdateInventory([], [])));
+        ProbeValue<UpdateInventory>.Available(new UpdateInventory([], [])),
+        ProbeValue<SbomInventory>.Available(new SbomInventory(
+            "CycloneDX",
+            "1.6",
+            DateTimeOffset.UnixEpoch,
+            [
+                new SbomTarget(
+                    "host",
+                    "host",
+                    "WIN-TEST",
+                    [new SbomComponent("Example.Package", "1.0.0", "application")])
+            ])));
 
     private sealed class SequenceHandler(params HttpStatusCode[] statuses) : HttpMessageHandler
     {

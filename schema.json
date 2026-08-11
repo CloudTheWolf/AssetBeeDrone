@@ -23,7 +23,8 @@
     "domainWorkspace",
     "loginProviders",
     "antivirus",
-    "updates"
+    "updates",
+    "sbom"
   ],
   "properties": {
     "schemaVersion": {
@@ -58,7 +59,8 @@
     "domainWorkspace": { "$ref": "#/$defs/probeDomainWorkspaceInfo" },
     "loginProviders": { "$ref": "#/$defs/probeLoginProviderInfoArray" },
     "antivirus": { "$ref": "#/$defs/probeAntivirusInfoArray" },
-    "updates": { "$ref": "#/$defs/probeUpdateInventory" }
+    "updates": { "$ref": "#/$defs/probeUpdateInventory" },
+    "sbom": { "$ref": "#/$defs/probeSbomInventory" }
   },
   "$defs": {
     "probeStatus": {
@@ -376,6 +378,74 @@
         "value": {
           "oneOf": [
             { "$ref": "#/$defs/updateInventory" },
+            { "type": "null" }
+          ]
+        },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "sbomComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": ["string", "null"] },
+        "type": { "type": "string" },
+        "purl": { "type": ["string", "null"] },
+        "publisher": { "type": ["string", "null"] }
+      }
+    },
+    "sbomTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bomRef", "kind", "name", "components"],
+      "properties": {
+        "bomRef": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["host", "container"]
+        },
+        "name": { "type": "string" },
+        "version": { "type": ["string", "null"] },
+        "image": { "type": ["string", "null"] },
+        "containerId": { "type": ["string", "null"] },
+        "detail": { "type": ["string", "null"] },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sbomComponent" }
+        }
+      }
+    },
+    "sbomInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "specVersion", "generatedAtUtc", "targets"],
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "CycloneDX"
+        },
+        "specVersion": { "type": "string" },
+        "generatedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "targets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sbomTarget" }
+        }
+      }
+    },
+    "probeSbomInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "$ref": "#/$defs/probeStatus" },
+        "value": {
+          "oneOf": [
+            { "$ref": "#/$defs/sbomInventory" },
             { "type": "null" }
           ]
         },

@@ -1,0 +1,36 @@
+#!/bin/sh
+# postinstall - register LaunchDaemon after pkg payload is laid down.
+set -e
+
+PLIST_SRC="/Library/AssetBee/Drone/com.assetbee.drone.plist"
+PLIST_DST="/Library/LaunchDaemons/com.assetbee.drone.plist"
+INSTALL_DIR="/Library/AssetBee/Drone"
+SETTINGS="$INSTALL_DIR/appsettings.json"
+
+if [ -f "$PLIST_SRC" ]; then
+  install -o root -g wheel -m 0644 "$PLIST_SRC" "$PLIST_DST"
+fi
+
+if [ -d "$INSTALL_DIR" ]; then
+  chown -R root:wheel "$INSTALL_DIR"
+  if [ -f "$INSTALL_DIR/AssetBee.Drone" ]; then
+    chmod 0700 "$INSTALL_DIR/AssetBee.Drone"
+  fi
+  if [ -f "$SETTINGS" ]; then
+    chmod 0600 "$SETTINGS"
+  fi
+fi
+
+launchctl bootout system/com.assetbee.drone 2>/dev/null || true
+
+if [ -f "$SETTINGS" ] && [ -f "$PLIST_DST" ]; then
+  launchctl bootstrap system "$PLIST_DST"
+  launchctl enable system/com.assetbee.drone
+  launchctl kickstart -k system/com.assetbee.drone
+else
+  echo "AssetBee Drone is installed but not started." >&2
+  echo "Write $SETTINGS then: launchctl bootstrap system $PLIST_DST" >&2
+  echo "Or use deploy/macos/packaging/install-package.sh --endpoint ... --bearer-token ..." >&2
+fi
+
+exit 0

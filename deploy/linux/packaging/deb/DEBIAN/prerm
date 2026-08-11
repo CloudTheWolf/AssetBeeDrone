@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# prerm - stop AssetBee Drone before package removal.
+set -eu
+
+if [ "${1:-}" = "remove" ] || [ "${1:-}" = "upgrade" ] || [ "${1:-}" = "deconfigure" ]; then
+  systemctl disable --now assetbee-drone.service 2>/dev/null || true
+fi
+
+exit 0

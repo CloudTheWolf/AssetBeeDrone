@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# postrm - clean unit file after package removal.
+set -eu
+
+if [ "${1:-}" = "purge" ] || [ "${1:-}" = "remove" ]; then
+  rm -f /etc/systemd/system/assetbee-drone.service
+  systemctl daemon-reload 2>/dev/null || true
+fi
+
+if [ "${1:-}" = "purge" ]; then
+  rm -rf /etc/assetbee-drone
+fi
+
+exit 0

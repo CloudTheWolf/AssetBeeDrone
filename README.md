@@ -15,6 +15,9 @@ and macOS devices and posts a versioned JSON document to an HTTPS endpoint.
 - Built-in login systems plus GCPW, Jamf Connect, XCreds, NoMAD, SSSD, and LDAP
 - Windows Security Center products, Gatekeeper/XProtect, and recognized
   Linux/macOS AV or EDR products
+- CycloneDX-style SBOM of host packages (dpkg/rpm, Windows Uninstall registry
+  and AppX, macOS pkgutil), plus running Docker container package inventories
+  on Linux
 
 Each section has a `status` (`available`, `unavailable`, `unsupported`,
 `accessDenied`, or `error`), a `value`, and an optional safe `detail`. A failed
@@ -34,6 +37,8 @@ Drone__BearerToken=secret
 Drone__Type=
 Drone__Debug=false
 Drone__DebugOutputPath=inventory-debug.json
+Drone__IncludeSbom=true
+Drone__IncludeContainerSboms=true
 ```
 
 `Drone__ApiKey` may be used instead of `Drone__BearerToken`; it is sent as
@@ -47,6 +52,12 @@ exponential backoff.
 `virtualware`. When omitted, Drone checks platform virtualization signals.
 Hardware assets also include `hardwareType` when the chassis can be identified:
 `laptop`, `desktop`, or `server`.
+
+`Drone__IncludeSbom` (default `true`) generates a CycloneDX-style SBOM for host
+OS packages. On Linux, `Drone__IncludeContainerSboms` (default `true`) also
+inventories packages inside running Docker containers via `docker ps` and
+`docker exec` (dpkg, rpm, or apk). Container SBOMs require the Docker CLI and
+permission to inspect/exec into containers.
 
 ### Debug payload dump
 
@@ -66,7 +77,7 @@ The endpoint receives `application/json` with schema version `1.0`. The root
 fields are `schemaVersion`, `collectedAtUtc`, `platform`, `type`,
 `hardwareType`, `deviceName`, `serialNumber`, `manufacturer`, `model`,
 `operatingSystem`, `cpu`, `memory`, `disks`, `diskEncryption`,
-`domainWorkspace`, `loginProviders`, `antivirus`, and `updates`.
+`domainWorkspace`, `loginProviders`, `antivirus`, `updates`, and `sbom`.
 
 `manufacturer` comes from the system manufacturer and `model` from the system
 SKU (falling back to the product/model name when SKU is blank). Both values are
@@ -107,11 +118,41 @@ dotnet publish -p:PublishProfile=osx-x64
 dotnet publish -p:PublishProfile=osx-arm64
 ```
 
+## Packaging
+
+Native AOT publish and native package builds must run on the matching OS family
+(or via `.github/workflows/release-packages.yml`). After publishing a RID:
+
+```sh
+# Linux / macOS host
+./deploy/packaging/build.sh --rid linux-x64 --publish-dir bin/Release/net10.0/linux-x64/publish
+
+# Windows host (PowerShell)
+.\deploy\packaging\build-archive.ps1 -PublishDirectory .\bin\Release\net10.0\win-x64\publish -Rid win-x64
+.\deploy\windows\build-msi.ps1 -PublishDirectory .\bin\Release\net10.0\win-x64\publish
+```
+
+Artifacts land in `dist/`: portable archives (`.zip` / `.tar.gz`) plus native
+packages (`.msi`, `.deb`, `.rpm`, `.pkg`). Packages are unsigned in v1; expect
+SmartScreen / Gatekeeper prompts until signed and notarized.
+
 ## Install
+
+Pass an HTTPS `Endpoint` and exactly one of `BearerToken` / `ApiKey` at install
+time.
 
 ### Windows
 
-From elevated PowerShell, publish `win-x64` and run:
+**MSI**
+
+```powershell
+msiexec /i AssetBee.Drone-1.0.0-win-x64.msi /qn `
+  ENDPOINT=https://inventory.example.com/api/v1/inventory `
+  BEARERTOKEN=secret
+# or APIKEY=secret
+```
+
+**Portable archive / publish folder**
 
 ```powershell
 .\deploy\windows\install.ps1 `
@@ -120,46 +161,61 @@ From elevated PowerShell, publish `win-x64` and run:
   -BearerToken 'secret'
 ```
 
-The installer registers `AssetBeeDrone` as an automatic LocalSystem service
-and locks its directory ACL. Use `deploy/windows/uninstall.ps1` to remove it.
+Registers `AssetBeeDrone` as an automatic LocalSystem service and locks the
+install directory ACL. Uninstall with `deploy/windows/uninstall.ps1` or
+Add/Remove Programs for the MSI.
 
 ### Linux
 
-Edit `/etc/assetbee-drone/environment` after installation and keep it mode
-`0600`:
+**Package (.deb / .rpm)**
 
 ```sh
-sudo deploy/linux/install.sh bin/Release/net10.0/linux-x64/publish
-sudo systemctl restart assetbee-drone
+sudo deploy/linux/packaging/install-package.sh \
+  dist/AssetBee.Drone-1.0.0-linux-x64.deb \
+  --endpoint https://inventory.example.com/api/v1/inventory \
+  --bearer-token secret
+```
+
+**Portable archive / publish folder**
+
+```sh
+sudo deploy/linux/install.sh bin/Release/net10.0/linux-x64/publish \
+  --endpoint https://inventory.example.com/api/v1/inventory \
+  --bearer-token secret
 sudo journalctl -u assetbee-drone
 ```
 
-To uninstall:
+Uninstall:
 
 ```sh
-sudo systemctl disable --now assetbee-drone
-sudo rm /etc/systemd/system/assetbee-drone.service
-sudo systemctl daemon-reload
-sudo rm -rf /opt/assetbee-drone /etc/assetbee-drone
+sudo deploy/linux/uninstall.sh
+# or: sudo dpkg -r assetbee-drone / sudo rpm -e assetbee-drone
 ```
 
 ### macOS
 
-Create a root-readable `appsettings.production.json` with the `Drone` section,
-then run:
+**Package (.pkg)**
 
 ```sh
-sudo deploy/macos/install.sh \
-  bin/Release/net10.0/osx-arm64/publish \
-  appsettings.production.json
+sudo deploy/macos/packaging/install-package.sh \
+  dist/AssetBee.Drone-1.0.0-osx-arm64.pkg \
+  --endpoint https://inventory.example.com/api/v1/inventory \
+  --bearer-token secret
 ```
 
-To uninstall:
+**Portable archive / publish folder**
 
 ```sh
-sudo launchctl bootout system/com.assetbee.drone
-sudo rm /Library/LaunchDaemons/com.assetbee.drone.plist
-sudo rm -rf /Library/AssetBee/Drone
+sudo deploy/macos/install.sh bin/Release/net10.0/osx-arm64/publish \
+  --endpoint https://inventory.example.com/api/v1/inventory \
+  --bearer-token secret
+```
+
+You can still pass `--settings-file path.json` instead of endpoint/auth flags.
+Uninstall:
+
+```sh
+sudo deploy/macos/uninstall.sh
 ```
 
 ## Platform notes

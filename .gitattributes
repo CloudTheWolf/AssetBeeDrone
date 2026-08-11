@@ -3,6 +3,15 @@
 ###############################################################################
 * text=auto
 
+# Shell / packaging scripts must stay LF for Linux and macOS.
+*.sh text eol=lf
+deploy/linux/packaging/deb/DEBIAN/postinst text eol=lf
+deploy/linux/packaging/deb/DEBIAN/prerm text eol=lf
+deploy/linux/packaging/deb/DEBIAN/postrm text eol=lf
+deploy/macos/packaging/scripts/postinstall text eol=lf
+*.service text eol=lf
+*.plist text eol=lf
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #

@@ -1,14 +1,19 @@
 using AssetBeeDrone.Collectors.Linux;
 using AssetBeeDrone.Collectors.MacOS;
 using AssetBeeDrone.Collectors.Windows;
+using AssetBeeDrone.Configuration;
 using AssetBeeDrone.Infrastructure;
 using AssetBeeDrone.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace AssetBeeDrone.Tests;
 
 public sealed class CollectorTests
 {
+    private static IOptions<DroneOptions> DefaultOptions { get; } =
+        Options.Create(new DroneOptions());
+
     [Fact]
     public async Task Host_platform_collection_smoke_test()
     {
@@ -19,7 +24,7 @@ public sealed class CollectorTests
 
         ProcessRunner runner = new(NullLogger<ProcessRunner>.Instance);
         DeviceInventory inventory =
-            await new LinuxInventoryCollector(runner, TimeProvider.System)
+            await new LinuxInventoryCollector(runner, TimeProvider.System, DefaultOptions)
                 .CollectAsync(CancellationToken.None);
 
         Assert.Equal("linux", inventory.Platform);
@@ -31,19 +36,34 @@ public sealed class CollectorTests
         Assert.Equal(ProbeStatus.Available, inventory.Updates.Status);
         Assert.NotNull(inventory.Cpu.Value);
         Assert.NotNull(inventory.Memory.Value);
+        Assert.NotEqual(ProbeStatus.Error, inventory.Sbom.Status);
     }
 
     [Fact]
     public async Task Windows_collector_parses_sensitive_and_security_fields()
     {
         string fixture = await ReadFixtureAsync("windows-inventory.json");
-        FakeProcessRunner runner = new((file, _) =>
-            file == "powershell.exe"
-                ? new ProcessResult(0, fixture, string.Empty)
-                : Missing(file));
+        FakeProcessRunner runner = new((file, arguments) =>
+        {
+            if (file != "powershell.exe")
+            {
+                return Missing(file);
+            }
+
+            string command = string.Join(' ', arguments);
+            if (command.Contains("Uninstall", StringComparison.Ordinal) ||
+                command.Contains("Get-AppxPackage", StringComparison.Ordinal))
+            {
+                return new ProcessResult(0,
+                    """[{"Name":"Example.Package","Version":"1.2.3","Publisher":"Programs"}]""",
+                    string.Empty);
+            }
+
+            return new ProcessResult(0, fixture, string.Empty);
+        });
 
         DeviceInventory inventory =
-            await new WindowsInventoryCollector(runner, TimeProvider.System)
+            await new WindowsInventoryCollector(runner, TimeProvider.System, DefaultOptions)
                 .CollectAsync(CancellationToken.None);
 
         Assert.Equal("ABC123", inventory.SerialNumber.Value);
@@ -68,10 +88,14 @@ public sealed class CollectorTests
             inventory.DiskEncryption.Value[0].KeyProtectors![0].RecoveryKey);
         Assert.Equal("KB5034441", inventory.Updates.Value!.Installed[0].Id);
         Assert.Equal("update-1", inventory.Updates.Value.Available[0].Id);
+        Assert.Equal(ProbeStatus.Available, inventory.Sbom.Status);
+        Assert.Equal("CycloneDX", inventory.Sbom.Value!.Format);
+        Assert.Contains(inventory.Sbom.Value.Targets.Single(target => target.Kind == "host").Components,
+            component => component.Name == "Example.Package" && component.Version == "1.2.3");
     }
 
     [Fact]
-    public async Task Linux_collector_reports_luks_realm_and_loaded_security_service()
+    public async Task Linux_collector_reports_luks_realm_security_service_and_sbom()
     {
         string lsblk = await ReadFixtureAsync("linux-lsblk.txt");
         FakeProcessRunner runner = new((file, arguments) => (file, string.Join(' ', arguments)) switch
@@ -86,11 +110,18 @@ public sealed class CollectorTests
             ("systemctl", string value) when value.Contains("clamav-daemon") =>
                 new ProcessResult(0, "loaded\nactive\n", string.Empty),
             ("systemctl", _) => new ProcessResult(0, "not-found\ninactive\n", string.Empty),
+            ("dpkg-query", _) => new ProcessResult(0, "bash\t5.2.21-2\nopenssl\t3.0.13-0\n", string.Empty),
+            ("docker", string value) when value.StartsWith("ps ", StringComparison.Ordinal) =>
+                new ProcessResult(0,
+                    """{"ID":"abc123","Names":"web","Image":"nginx:1.25"}""" + "\n",
+                    string.Empty),
+            ("docker", string value) when value.Contains("exec abc123 dpkg-query", StringComparison.Ordinal) =>
+                new ProcessResult(0, "nginx\t1.25.0-1\n", string.Empty),
             _ => Missing(file)
         });
 
         DeviceInventory inventory =
-            await new LinuxInventoryCollector(runner, TimeProvider.System)
+            await new LinuxInventoryCollector(runner, TimeProvider.System, DefaultOptions)
                 .CollectAsync(CancellationToken.None);
 
         Assert.Contains(inventory.DiskEncryption.Value!,
@@ -101,6 +132,15 @@ public sealed class CollectorTests
         Assert.True(antivirus.Enabled);
         Assert.Contains(inventory.Updates.Value!.Available,
             update => update.Id == "linux-image-generic");
+        Assert.Equal(ProbeStatus.Available, inventory.Sbom.Status);
+        Assert.Contains(inventory.Sbom.Value!.Targets,
+            target => target.Kind == "host" &&
+                      target.Components.Any(component => component.Name == "bash"));
+        Assert.Contains(inventory.Sbom.Value.Targets,
+            target => target.Kind == "container" &&
+                      target.Name == "web" &&
+                      target.Image == "nginx:1.25" &&
+                      target.Components.Any(component => component.Name == "nginx"));
     }
 
     [Fact]
@@ -126,12 +166,15 @@ public sealed class CollectorTests
             ("profiles", _) => new ProcessResult(0,
                 "Enrolled via DEP: Yes\nMDM enrollment: Yes\n", string.Empty),
             ("spctl", _) => new ProcessResult(0, "assessments enabled\n", string.Empty),
+            ("pkgutil", "--pkgs") => new ProcessResult(0, "com.example.app\n", string.Empty),
+            ("pkgutil", string value) when value.StartsWith("--pkg-info ", StringComparison.Ordinal) =>
+                new ProcessResult(0, "version: 2.1.0\n", string.Empty),
             ("pkgutil", _) => new ProcessResult(0, "version: 2169\n", string.Empty),
             _ => Missing(file)
         });
 
         DeviceInventory inventory =
-            await new MacOsInventoryCollector(runner, TimeProvider.System)
+            await new MacOsInventoryCollector(runner, TimeProvider.System, DefaultOptions)
                 .CollectAsync(CancellationToken.None);
 
         Assert.Equal("MAC123", inventory.SerialNumber.Value);
@@ -146,6 +189,9 @@ public sealed class CollectorTests
             update => update.Id.Contains("15.2"));
         Assert.Contains(inventory.Updates.Value.Installed,
             update => update.Title.Contains("15.1"));
+        Assert.Equal(ProbeStatus.Available, inventory.Sbom.Status);
+        Assert.Contains(inventory.Sbom.Value!.Targets.Single().Components,
+            component => component.Name == "com.example.app" && component.Version == "2.1.0");
     }
 
     private static async Task<string> ReadFixtureAsync(string name) =>

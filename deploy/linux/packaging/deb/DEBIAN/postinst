@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+# postinst - configure and start AssetBee Drone when environment is present.
+set -eu
+
+ENV_FILE=/etc/assetbee-drone/environment
+
+systemctl daemon-reload || true
+
+if [ -f "$ENV_FILE" ] && grep -q '^Drone__Endpoint=https://' "$ENV_FILE"; then
+  systemctl enable --now assetbee-drone.service || true
+else
+  cat >&2 <<'EOF'
+AssetBee Drone is installed but not started.
+Write /etc/assetbee-drone/environment (mode 0600) with Drone__Endpoint and
+Drone__BearerToken or Drone__ApiKey, then run:
+  systemctl enable --now assetbee-drone.service
+Or use deploy/linux/packaging/install-package.sh --endpoint ... --bearer-token ...
+EOF
+fi
+
+exit 0

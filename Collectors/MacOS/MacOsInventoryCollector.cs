@@ -1,15 +1,19 @@
 using System.Globalization;
 using System.Text.Json;
+using AssetBeeDrone.Configuration;
 using AssetBeeDrone.Infrastructure;
 using AssetBeeDrone.Models;
+using Microsoft.Extensions.Options;
 
 namespace AssetBeeDrone.Collectors.MacOS;
 
 public sealed class MacOsInventoryCollector(
     IProcessRunner processRunner,
-    TimeProvider timeProvider) : InventoryCollectorBase, IDeviceInventoryCollector
+    TimeProvider timeProvider,
+    IOptions<DroneOptions> options) : InventoryCollectorBase, IDeviceInventoryCollector
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(30);
+    private readonly DroneOptions _options = options.Value;
 
     public async Task<DeviceInventory> CollectAsync(CancellationToken cancellationToken)
     {
@@ -24,6 +28,8 @@ public sealed class MacOsInventoryCollector(
         Task<ProbeValue<IReadOnlyList<AntivirusInfo>>> antivirusTask =
             CollectAntivirusAsync(cancellationToken);
         Task<ProbeValue<UpdateInventory>> updatesTask = CollectUpdatesAsync(cancellationToken);
+        Task<ProbeValue<SbomInventory>> sbomTask = SbomCollector.CollectMacOsAsync(
+            processRunner, timeProvider, _options.IncludeSbom, cancellationToken);
 
         await Task.WhenAll(
             hardwareTask,
@@ -32,7 +38,8 @@ public sealed class MacOsInventoryCollector(
             encryptionTask,
             domainTask,
             antivirusTask,
-            updatesTask);
+            updatesTask,
+            sbomTask);
         (ProbeValue<string> serial, ProbeValue<CpuInfo> cpu, ProbeValue<string> model) =
             ParseHardware(await hardwareTask);
 
@@ -52,7 +59,8 @@ public sealed class MacOsInventoryCollector(
             await domainTask,
             CollectLoginProviders(),
             await antivirusTask,
-            await updatesTask);
+            await updatesTask,
+            await sbomTask);
     }
 
     private async Task<ProbeValue<OperatingSystemInfo>> CollectOperatingSystemAsync(

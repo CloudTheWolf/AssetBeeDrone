@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package
+      Name="AssetBee Drone"
+      Manufacturer="AssetBee"
+      Version="$(var.Version)"
+      UpgradeCode="A7E3C2B1-4D5F-6A78-9B0C-1D2E3F4A5B6C"
+      Scope="perMachine"
+      Language="1033">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of AssetBee Drone is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ENDPOINT" Secure="yes" />
+    <Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
+    <Property Id="APIKEY" Secure="yes" Hidden="yes" />
+
+    <Launch
+        Condition="ENDPOINT &lt;&gt; &quot;&quot;"
+        Message="Set the ENDPOINT property to an HTTPS inventory URL (msiexec ... ENDPOINT=https://...)." />
+    <Launch
+        Condition="(BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;)"
+        Message="Provide exactly one of BEARERTOKEN or APIKEY." />
+
+    <Feature Id="Main" Title="AssetBee Drone" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="AssetBeeFolder" Name="AssetBee">
+        <Directory Id="INSTALLFOLDER" Name="Drone" />
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="InstallFolderAcl" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+        <CreateFolder>
+          <util:PermissionEx User="SYSTEM" GenericAll="yes" />
+          <util:PermissionEx User="Administrators" GenericAll="yes" />
+        </CreateFolder>
+        <RemoveFile Id="RemoveAppSettings" Name="appsettings.json" On="uninstall" />
+      </Component>
+
+      <Component Id="DroneBinary" Guid="B1C2D3E4-F5A6-7890-1234-56789ABCDEF0">
+        <File Id="DroneExe" Source="$(var.PublishDir)\AssetBee.Drone.exe" KeyPath="yes" />
+        <ServiceInstall
+            Id="AssetBeeDroneService"
+            Name="AssetBeeDrone"
+            DisplayName="AssetBee Drone"
+            Description="Collects and securely reports device inventory."
+            Type="ownProcess"
+            Start="auto"
+            Account="LocalSystem"
+            ErrorControl="normal"
+            Vital="yes" />
+        <ServiceControl
+            Id="StartAssetBeeDroneService"
+            Name="AssetBeeDrone"
+            Start="install"
+            Stop="both"
+            Remove="uninstall"
+            Wait="yes" />
+        <util:ServiceConfig
+            ServiceName="AssetBeeDrone"
+            FirstFailureActionType="restart"
+            SecondFailureActionType="restart"
+            ThirdFailureActionType="restart"
+            RestartServiceDelayInSeconds="15"
+            ResetPeriodInDays="1" />
+      </Component>
+
+      <Component Id="WriteAppSettingsScript" Guid="C2D3E4F5-A6B7-8901-2345-6789ABCDEF01">
+        <File Id="WriteAppSettingsPs1" Source="$(var.SourceDir)\WriteAppSettings.ps1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Type 50: deferred CA command line comes from the property of the same name. -->
+    <SetProperty
+        Id="WriteAppSettings"
+        Sequence="execute"
+        Before="WriteAppSettings"
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]WriteAppSettings.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -BearerToken &quot;[BEARERTOKEN]&quot; -ApiKey &quot;[APIKEY]&quot; -InstallDir &quot;[INSTALLFOLDER]&quot;" />
+
+    <CustomAction
+        Id="WriteAppSettings"
+        Property="WriteAppSettings"
+        Execute="deferred"
+        Impersonate="no"
+        Return="check" />
+
+    <InstallExecuteSequence>
+      <Custom Action="WriteAppSettings" Before="StartServices" Condition="NOT Installed" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>
