@@ -110,6 +110,9 @@ public sealed class CollectorTests
             ("systemctl", string value) when value.Contains("clamav-daemon") =>
                 new ProcessResult(0, "loaded\nactive\n", string.Empty),
             ("systemctl", _) => new ProcessResult(0, "not-found\ninactive\n", string.Empty),
+            ("hostnamectl", _) => new ProcessResult(0,
+                """{"HardwareVendor":"Dell Inc.","HardwareModel":"Latitude 5520","HardwareSerial":"LINUXSERIAL"}""",
+                string.Empty),
             ("dpkg-query", _) => new ProcessResult(0, "bash\t5.2.21-2\nopenssl\t3.0.13-0\n", string.Empty),
             ("docker", string value) when value.StartsWith("ps ", StringComparison.Ordinal) =>
                 new ProcessResult(0,
@@ -124,6 +127,9 @@ public sealed class CollectorTests
             await new LinuxInventoryCollector(runner, TimeProvider.System, DefaultOptions)
                 .CollectAsync(CancellationToken.None);
 
+        Assert.Equal("LINUXSERIAL", inventory.SerialNumber.Value);
+        Assert.Equal("dellInc", inventory.Manufacturer.Value);
+        Assert.Equal("latitude5520", inventory.Model.Value);
         Assert.Contains(inventory.DiskEncryption.Value!,
             volume => volume.Technology == "LUKS/dm-crypt");
         Assert.Equal("example.test", inventory.DomainWorkspace.Value?.Domain);

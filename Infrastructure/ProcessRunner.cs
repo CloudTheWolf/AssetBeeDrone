@@ -5,6 +5,9 @@ namespace AssetBeeDrone.Infrastructure;
 
 public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunner
 {
+    private const string UnixDefaultPath =
+        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
     public async Task<ProcessResult> RunAsync(
         string fileName,
         IEnumerable<string> arguments,
@@ -25,6 +28,8 @@ public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunne
         {
             process.StartInfo.ArgumentList.Add(argument);
         }
+
+        EnsureUnixProbePath(process.StartInfo);
 
         try
         {
@@ -59,6 +64,30 @@ public sealed class ProcessRunner(ILogger<ProcessRunner> logger) : IProcessRunne
             logger.LogDebug("Probe executable {Executable} was unavailable: {Message}",
                 fileName, exception.Message);
             return new ProcessResult(-1, string.Empty, $"{fileName} is unavailable.");
+        }
+    }
+
+    private static void EnsureUnixProbePath(ProcessStartInfo startInfo)
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        string path = startInfo.Environment.TryGetValue("PATH", out string? existing)
+            ? existing ?? string.Empty
+            : Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            startInfo.Environment["PATH"] = UnixDefaultPath;
+            return;
+        }
+
+        if (!path.Split(':', StringSplitOptions.RemoveEmptyEntries)
+                .Contains("/usr/bin", StringComparer.Ordinal))
+        {
+            startInfo.Environment["PATH"] = $"{path}:{UnixDefaultPath}";
         }
     }
 

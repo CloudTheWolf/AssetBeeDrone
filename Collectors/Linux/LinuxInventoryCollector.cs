@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using AssetBeeDrone.Configuration;
 using AssetBeeDrone.Infrastructure;
@@ -32,18 +33,26 @@ public sealed partial class LinuxInventoryCollector(
             _options.IncludeSbom,
             _options.IncludeContainerSboms,
             cancellationToken);
+        Task<HostIdentity> identityTask = CollectHostIdentityAsync(cancellationToken);
 
         await Task.WhenAll(
-            operatingSystemTask, encryptionTask, domainTask, antivirusTask, updatesTask, sbomTask);
+            operatingSystemTask,
+            encryptionTask,
+            domainTask,
+            antivirusTask,
+            updatesTask,
+            sbomTask,
+            identityTask);
 
+        HostIdentity identity = await identityTask;
         return new DeviceInventory(
             "1.0",
             timeProvider.GetUtcNow(),
             "linux",
             ProbeValue<string>.Available(Environment.MachineName),
-            CollectSerial(),
-            CollectManufacturer(),
-            CollectModel(),
+            identity.SerialNumber,
+            identity.Manufacturer,
+            identity.Model,
             await operatingSystemTask,
             CollectCpu(),
             CollectMemory(),
@@ -56,32 +65,158 @@ public sealed partial class LinuxInventoryCollector(
             await sbomTask);
     }
 
-    private static ProbeValue<string> CollectSerial()
-    {
-        string? serial = ReadFirstExistingFile(
-            "/sys/class/dmi/id/product_serial",
-            "/sys/devices/virtual/dmi/id/product_serial",
-            "/sys/firmware/devicetree/base/serial-number");
-        return string.IsNullOrWhiteSpace(serial)
-            ? ProbeValue<string>.Unavailable("No firmware serial number was exposed by the kernel.")
-            : ProbeValue<string>.Available(serial);
-    }
+    private sealed record HostIdentity(
+        ProbeValue<string> SerialNumber,
+        ProbeValue<string> Manufacturer,
+        ProbeValue<string> Model);
 
-    private static ProbeValue<string> CollectManufacturer() =>
-        AvailableCamelCaseIdentifier(
+    private async Task<HostIdentity> CollectHostIdentityAsync(CancellationToken cancellationToken)
+    {
+        Dictionary<string, string> hostnamectl = await ReadHostnamectlAsync(cancellationToken);
+
+        string? serial = FirstMeaningful(
+            ReadFirstExistingFile(
+                "/sys/class/dmi/id/product_serial",
+                "/sys/devices/virtual/dmi/id/product_serial",
+                "/sys/class/dmi/id/product_uuid",
+                "/sys/devices/virtual/dmi/id/product_uuid",
+                "/sys/class/dmi/id/board_serial",
+                "/sys/devices/virtual/dmi/id/board_serial",
+                "/sys/firmware/devicetree/base/serial-number"),
+            GetMapValue(hostnamectl, "HardwareSerial", "Serial"));
+
+        string? manufacturer = FirstMeaningful(
             ReadFirstExistingFile(
                 "/sys/class/dmi/id/sys_vendor",
-                "/sys/devices/virtual/dmi/id/sys_vendor"),
-            "System manufacturer was not exposed by DMI.");
+                "/sys/devices/virtual/dmi/id/sys_vendor",
+                "/sys/class/dmi/id/board_vendor",
+                "/sys/devices/virtual/dmi/id/board_vendor",
+                "/sys/class/dmi/id/chassis_vendor",
+                "/sys/devices/virtual/dmi/id/chassis_vendor"),
+            GetMapValue(hostnamectl, "HardwareVendor", "Vendor"));
 
-    private static ProbeValue<string> CollectModel() =>
-        AvailableCamelCaseIdentifier(
+        string? model = FirstMeaningful(
             ReadFirstExistingFile(
                 "/sys/class/dmi/id/product_sku",
                 "/sys/devices/virtual/dmi/id/product_sku",
                 "/sys/class/dmi/id/product_name",
-                "/sys/devices/virtual/dmi/id/product_name"),
-            "System SKU was not exposed by DMI.");
+                "/sys/devices/virtual/dmi/id/product_name",
+                "/sys/class/dmi/id/board_name",
+                "/sys/devices/virtual/dmi/id/board_name",
+                "/sys/firmware/devicetree/base/model"),
+            GetMapValue(hostnamectl, "HardwareModel", "Model"));
+
+        // Last-resort stable id when firmware DMI is absent (containers, WSL, some VMs).
+        serial ??= FirstMeaningful(
+            ReadFirstExistingFile("/etc/machine-id", "/var/lib/dbus/machine-id"));
+
+        return new HostIdentity(
+            string.IsNullOrWhiteSpace(serial)
+                ? ProbeValue<string>.Unavailable(
+                    "No firmware serial, product UUID, or machine-id was available.")
+                : ProbeValue<string>.Available(serial),
+            AvailableCamelCaseIdentifier(
+                manufacturer,
+                "System manufacturer was not exposed by DMI or hostnamectl."),
+            AvailableCamelCaseIdentifier(
+                model,
+                "System SKU/model was not exposed by DMI or hostnamectl."));
+    }
+
+    private async Task<Dictionary<string, string>> ReadHostnamectlAsync(
+        CancellationToken cancellationToken)
+    {
+        ProcessResult json = await processRunner.RunAsync(
+            "hostnamectl", ["--json=short"], ProbeTimeout, cancellationToken);
+        if (json.Succeeded && !string.IsNullOrWhiteSpace(json.StandardOutput))
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(json.StandardOutput);
+                Dictionary<string, string> values = new(StringComparer.OrdinalIgnoreCase);
+                foreach (JsonProperty property in document.RootElement.EnumerateObject())
+                {
+                    if (property.Value.ValueKind == JsonValueKind.String)
+                    {
+                        values[property.Name] = property.Value.GetString() ?? string.Empty;
+                    }
+                }
+
+                return values;
+            }
+            catch (JsonException)
+            {
+                // Fall through to text parsing.
+            }
+        }
+
+        ProcessResult text = await processRunner.RunAsync(
+            "hostnamectl", [], ProbeTimeout, cancellationToken);
+        if (!text.Succeeded)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        Dictionary<string, string> parsed = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string line in text.StandardOutput.Split('\n',
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int separator = line.IndexOf(':');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            parsed[line[..separator].Trim()] = line[(separator + 1)..].Trim();
+        }
+
+        return parsed;
+    }
+
+    private static string? GetMapValue(Dictionary<string, string> values, params string[] keys)
+    {
+        foreach (string key in keys)
+        {
+            if (values.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? FirstMeaningful(params string?[] values)
+    {
+        foreach (string? value in values)
+        {
+            if (IsMeaningfulHardwareValue(value))
+            {
+                return value!.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsMeaningfulHardwareValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string normalized = value.Trim();
+        string[] placeholders =
+        [
+            "none", "null", "n/a", "na", "not specified", "not applicable",
+            "default string", "to be filled by o.e.m.", "to be filled by oem",
+            "system serial number", "system product name", "system manufacturer",
+            "chassis serial number", "invalid", "unknown", "undefined", "o.e.m."
+        ];
+        return !placeholders.Any(placeholder =>
+            normalized.Equals(placeholder, StringComparison.OrdinalIgnoreCase));
+    }
 
     private async Task<ProbeValue<OperatingSystemInfo>> CollectOperatingSystemAsync(
         CancellationToken cancellationToken)

@@ -4,20 +4,24 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-Type=notify
+Type=simple
 User=root
 Group=root
 WorkingDirectory=/opt/assetbee-drone
 ExecStart=/opt/assetbee-drone/AssetBee.Drone
 EnvironmentFile=-/etc/assetbee-drone/environment
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Restart=on-failure
 RestartSec=15
 TimeoutStopSec=30
+# Allow debug dumps and package/docker probes to function.
+ReadWritePaths=-/var/tmp
+# Docker container SBOM (ignored when the socket is absent).
+BindReadOnlyPaths=-/run/docker.sock -/var/run/docker.sock
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true

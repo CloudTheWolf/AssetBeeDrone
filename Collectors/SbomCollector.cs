@@ -326,6 +326,11 @@ public static class SbomCollector
         IProcessRunner processRunner,
         CancellationToken cancellationToken)
     {
+        if (!File.Exists("/run/docker.sock") && !File.Exists("/var/run/docker.sock"))
+        {
+            return [];
+        }
+
         ProcessResult docker = await processRunner.RunAsync(
             "docker",
             ["ps", "--format", "{{json .}}"],
@@ -340,6 +345,11 @@ public static class SbomCollector
         foreach (string line in docker.StandardOutput.Split('\n',
                      StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
+            if (targets.Count >= 50)
+            {
+                break;
+            }
+
             try
             {
                 using JsonDocument document = JsonDocument.Parse(line);

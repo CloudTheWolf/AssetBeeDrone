@@ -21,7 +21,16 @@ public sealed class HttpInventoryReporter(
 
         if (_options.Debug)
         {
-            await WriteDebugPayloadAsync(payload, cancellationToken);
+            try
+            {
+                await WriteDebugPayloadAsync(payload, cancellationToken);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                                                  or DirectoryNotFoundException)
+            {
+                logger.LogWarning(exception,
+                    "Debug payload dump failed; continuing with inventory delivery");
+            }
         }
 
         for (int attempt = 0; ; attempt++)
