@@ -10,6 +10,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# MSI directory properties end with '\'. Quoting that as "C:\Path\" escapes the
+# closing quote, so WiX passes "[INSTALLFOLDER]." and we strip the marker here.
+$InstallDir = $InstallDir.Trim().TrimEnd('.').TrimEnd('\')
+
 if ($Endpoint.Scheme -ne 'https') {
     throw 'The inventory endpoint must use HTTPS.'
 }

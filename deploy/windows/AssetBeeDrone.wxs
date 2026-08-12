@@ -79,7 +79,7 @@
         Id="WriteAppSettings"
         Sequence="execute"
         Before="WriteAppSettings"
-        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]WriteAppSettings.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -BearerToken &quot;[BEARERTOKEN]&quot; -ApiKey &quot;[APIKEY]&quot; -InstallDir &quot;[INSTALLFOLDER]&quot;" />
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]WriteAppSettings.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -BearerToken &quot;[BEARERTOKEN]&quot; -ApiKey &quot;[APIKEY]&quot; -InstallDir &quot;[INSTALLFOLDER].&quot;" />
 
     <CustomAction
         Id="WriteAppSettings"
