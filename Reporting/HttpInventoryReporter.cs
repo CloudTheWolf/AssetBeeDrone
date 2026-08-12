@@ -53,10 +53,15 @@ public sealed class HttpInventoryReporter(
 
                 if (!IsTransient(response.StatusCode) || attempt >= _options.MaxRetryAttempts)
                 {
-                    throw new HttpRequestException(
-                        $"Inventory endpoint returned HTTP {(int)response.StatusCode}.",
-                        null,
-                        response.StatusCode);
+                    string body = await ReadBodyPreviewAsync(response, cancellationToken);
+                    string detail = string.IsNullOrWhiteSpace(body)
+                        ? $"Inventory endpoint returned HTTP {(int)response.StatusCode}."
+                        : $"Inventory endpoint returned HTTP {(int)response.StatusCode}: {body}";
+                    logger.LogError(
+                        "Inventory delivery rejected with HTTP {StatusCode}: {ResponseBody}",
+                        (int)response.StatusCode,
+                        string.IsNullOrWhiteSpace(body) ? "<empty>" : body);
+                    throw new HttpRequestException(detail, null, response.StatusCode);
                 }
 
                 logger.LogWarning(
@@ -95,6 +100,27 @@ public sealed class HttpInventoryReporter(
             "Debug mode wrote the outbound inventory payload to {Path}. " +
             "This file may contain BitLocker recovery keys and other secrets.",
             path);
+    }
+
+    private static async Task<string> ReadBodyPreviewAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            string body = await response.Content.ReadAsStringAsync(cancellationToken);
+            body = body.Trim();
+            if (body.Length <= 2048)
+            {
+                return body;
+            }
+
+            return body[..2048] + "…";
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
     }
 
     private HttpRequestMessage CreateRequest(byte[] payload)

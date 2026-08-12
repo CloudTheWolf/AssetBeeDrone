@@ -14,8 +14,9 @@ Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Restart=on-failure
 RestartSec=15
 TimeoutStopSec=30
-# Allow debug dumps and package/docker probes to function.
-ReadWritePaths=-/var/tmp
+# Creates /var/lib/assetbee-drone and keeps it writable under ProtectSystem=strict.
+# (ReadWritePaths=-... is skipped when the path is missing, which caused RO failures.)
+StateDirectory=assetbee-drone
 # Docker container SBOM (ignored when the socket is absent).
 BindReadOnlyPaths=-/run/docker.sock -/var/run/docker.sock
 NoNewPrivileges=true

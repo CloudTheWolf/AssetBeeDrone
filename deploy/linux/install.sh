@@ -100,7 +100,7 @@ trap 'rm -f "$tmp_env"' EXIT
     printf 'Drone__ApiKey=%s\n' "$api_key"
   fi
   printf 'Drone__Debug=false\n'
-  printf 'Drone__DebugOutputPath=/var/tmp/assetbee-drone-inventory-debug.json\n'
+  printf 'Drone__DebugOutputPath=/var/lib/assetbee-drone/inventory-debug.json\n'
 } >"$tmp_env"
 install -m 0600 "$tmp_env" "$env_file"
 

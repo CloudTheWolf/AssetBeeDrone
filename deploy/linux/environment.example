@@ -9,6 +9,6 @@ Drone__BearerToken=
 # Drone__ApiKey=
 # Debug writes the full outbound JSON (including BitLocker keys) to disk.
 Drone__Debug=false
-Drone__DebugOutputPath=/var/tmp/assetbee-drone-inventory-debug.json
+Drone__DebugOutputPath=/var/lib/assetbee-drone/inventory-debug.json
 Drone__IncludeSbom=true
 Drone__IncludeContainerSboms=true
