@@ -27,9 +27,7 @@ jobs:
           - os: macos-latest
             rid: osx-arm64
             publish_dir: bin/Release/net10.0/osx-arm64/publish
-          - os: macos-13
-            rid: osx-x64
-            publish_dir: bin/Release/net10.0/osx-x64/publish
+
 
     runs-on: ${{ matrix.os }}
 
