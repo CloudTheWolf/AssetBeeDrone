@@ -76,7 +76,11 @@ public sealed class CollectorTests
         Assert.Equal(8, inventory.Cpu.Value?.LogicalProcessors);
         Assert.Equal("Example Workspace", inventory.DomainWorkspace.Value?.Workspace);
         Assert.Contains(inventory.LoginProviders.Value!,
-            provider => provider.Name.Contains("Google Credential Provider"));
+            provider => provider.Name == "Windows Password" && provider.State == "enabled");
+        Assert.Contains(inventory.LoginProviders.Value!,
+            provider => provider.Name.Contains("Google Credential Provider") &&
+                        provider.Detail == "{F8A1793B-7873-4046-B2A7-1F318747F427}");
+        Assert.Equal(3, inventory.LoginProviders.Value!.Count);
         Assert.Equal(
             "111111-222222-333333-444444-555555-666666-777777-888888",
             inventory.DiskEncryption.Value![0].RecoveryKeys![0]);

@@ -39,7 +39,23 @@
     }
   ],
   "BitLockerAvailable": true,
-  "GcpwInstalled": true,
+  "LoginProviders": [
+    {
+      "Name": "Windows Password",
+      "CLSID": "{60B78E88-EAD8-445C-9CFD-0B87F74EA6CD}",
+      "Disabled": false
+    },
+    {
+      "Name": "Windows PIN",
+      "CLSID": "{D6886603-9D2F-4EB2-B667-1971041FA96B}",
+      "Disabled": false
+    },
+    {
+      "Name": "Google Credential Provider for Windows",
+      "CLSID": "{F8A1793B-7873-4046-B2A7-1F318747F427}",
+      "Disabled": false
+    }
+  ],
   "Antivirus": [
     {
       "Name": "Windows Defender",
