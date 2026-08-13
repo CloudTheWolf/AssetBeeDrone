@@ -51,9 +51,11 @@ $wixExe = Join-Path $wixToolDir 'wix.exe'
 
 # Pin WiX CLI + extensions so mismatched installs cannot break the build.
 Write-Host "Ensuring WiX CLI $wixVersion (dotnet tool)..."
+
 & dotnet tool update --global wix --version $wixVersion
 if ($LASTEXITCODE -ne 0) {
     & dotnet tool install --global wix --version $wixVersion
+
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to install WiX CLI $wixVersion"
     }
@@ -64,9 +66,36 @@ if (-not (Test-Path -LiteralPath $wixExe)) {
 }
 
 $env:PATH = "$wixToolDir;$env:PATH"
+
 & $wixExe --version | Out-Host
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to execute WiX CLI"
+}
+
+# WiX 7 requires explicit OSMF EULA acceptance.
+Write-Host "Accepting WiX $wixVersion EULA..."
+& $wixExe eula accept $wixEulaId
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to accept WiX EULA with exit code $LASTEXITCODE"
+}
+
+Write-Host "Ensuring WiX Util extension..."
 & $wixExe extension add -g "WixToolset.Util.wixext/$wixVersion"
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to install WixToolset.Util.wixext/$wixVersion with exit code $LASTEXITCODE"
+}
+
+Write-Host "Ensuring WiX UI extension..."
+
 & $wixExe extension add -g "WixToolset.UI.wixext/$wixVersion"
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to install WixToolset.Util.wixext/$wixVersion with exit code $LASTEXITCODE"
+}
+
+$env:PATH = "$wixToolDir;$env:PATH"
+
 
 $outputMsi = Join-Path $OutputDirectory "AssetBee.Drone-$Version-win-x64.msi"
 
