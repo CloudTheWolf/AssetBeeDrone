@@ -21,6 +21,7 @@ public sealed partial class LinuxInventoryCollector(
     {
         Task<ProbeValue<OperatingSystemInfo>> operatingSystemTask =
             CollectOperatingSystemAsync(cancellationToken);
+        Task<ProbeValue<IReadOnlyList<DiskInfo>>> disksTask = CollectDisksAsync(cancellationToken);
         Task<ProbeValue<IReadOnlyList<EncryptionVolume>>> encryptionTask =
             CollectEncryptionAsync(cancellationToken);
         Task<ProbeValue<DomainWorkspaceInfo>> domainTask = CollectDomainAsync(cancellationToken);
@@ -37,6 +38,7 @@ public sealed partial class LinuxInventoryCollector(
 
         await Task.WhenAll(
             operatingSystemTask,
+            disksTask,
             encryptionTask,
             domainTask,
             antivirusTask,
@@ -56,7 +58,7 @@ public sealed partial class LinuxInventoryCollector(
             await operatingSystemTask,
             CollectCpu(),
             CollectMemory(),
-            CollectMountedDisks(),
+            await disksTask,
             await encryptionTask,
             await domainTask,
             CollectLoginProviders(),
@@ -478,6 +480,177 @@ public sealed partial class LinuxInventoryCollector(
         return total is null
             ? ProbeValue<MemoryInfo>.Error("MemTotal could not be parsed.")
             : ProbeValue<MemoryInfo>.Available(new MemoryInfo(total.Value, available));
+    }
+
+    private async Task<ProbeValue<IReadOnlyList<DiskInfo>>> CollectDisksAsync(
+        CancellationToken cancellationToken)
+    {
+        ProcessResult result = await processRunner.RunAsync(
+            "lsblk",
+            ["-J", "-b", "-o", "NAME,KNAME,TYPE,FSTYPE,SIZE,FSAVAIL,MOUNTPOINT"],
+            ProbeTimeout,
+            cancellationToken);
+        if (!result.Succeeded || string.IsNullOrWhiteSpace(result.StandardOutput))
+        {
+            return ProbeValue<IReadOnlyList<DiskInfo>>.Unavailable(
+                "lsblk is unavailable; block devices could not be inventoried.");
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(result.StandardOutput);
+            List<DiskInfo> disks = [];
+            if (document.RootElement.TryGetProperty("blockdevices", out JsonElement devices))
+            {
+                CollectBlockDevices(devices, disks);
+            }
+
+            return ProbeValue<IReadOnlyList<DiskInfo>>.Available(disks);
+        }
+        catch (JsonException exception)
+        {
+            return ProbeValue<IReadOnlyList<DiskInfo>>.Error(
+                $"lsblk returned invalid JSON: {exception.Message}");
+        }
+    }
+
+    private static void CollectBlockDevices(JsonElement devices, List<DiskInfo> disks)
+    {
+        if (devices.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (JsonElement device in devices.EnumerateArray())
+        {
+            string? type = GetJsonString(device, "type");
+            string? name = GetJsonString(device, "kname") ?? GetJsonString(device, "name");
+            string? fstype = GetJsonString(device, "fstype");
+            string? mountPoint = GetJsonString(device, "mountpoint");
+            bool hasChildren = device.TryGetProperty("children", out JsonElement children) &&
+                               children.ValueKind == JsonValueKind.Array &&
+                               children.GetArrayLength() > 0;
+
+            if (ShouldIncludeBlockDevice(type, name, fstype, mountPoint, hasChildren) &&
+                !string.IsNullOrWhiteSpace(name) &&
+                TryGetUInt64(device, "size", out ulong size))
+            {
+                ulong? available = TryGetUInt64(device, "fsavail", out ulong fsAvail)
+                    ? fsAvail
+                    : null;
+                disks.Add(new DiskInfo(
+                    name,
+                    string.IsNullOrWhiteSpace(mountPoint) ? null : mountPoint,
+                    size,
+                    available,
+                    string.IsNullOrWhiteSpace(fstype) ? null : fstype));
+            }
+
+            if (hasChildren)
+            {
+                CollectBlockDevices(children, disks);
+            }
+        }
+    }
+
+    private static bool ShouldIncludeBlockDevice(
+        string? type,
+        string? name,
+        string? fstype,
+        string? mountPoint,
+        bool hasChildren)
+    {
+        if (string.IsNullOrWhiteSpace(name) ||
+            name.StartsWith("loop", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (type is not null &&
+            (type.Equals("loop", StringComparison.OrdinalIgnoreCase) ||
+             type.Equals("rom", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        if (IsVirtualFileSystem(fstype))
+        {
+            return false;
+        }
+
+        // Prefer partition/LVM/RAID/crypt names (nvme0n1p1). Skip blank parent disks
+        // that only exist as containers for child partitions.
+        if (type is not null &&
+            type.Equals("disk", StringComparison.OrdinalIgnoreCase) &&
+            hasChildren &&
+            string.IsNullOrWhiteSpace(fstype) &&
+            string.IsNullOrWhiteSpace(mountPoint))
+        {
+            return false;
+        }
+
+        return type is null ||
+               type.Equals("disk", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("part", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("lvm", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("crypt", StringComparison.OrdinalIgnoreCase) ||
+               type.StartsWith("raid", StringComparison.OrdinalIgnoreCase) ||
+               type.Equals("mpath", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsVirtualFileSystem(string? fstype)
+    {
+        if (string.IsNullOrWhiteSpace(fstype))
+        {
+            return false;
+        }
+
+        if (fstype.StartsWith("fuse", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string[] virtualFileSystems =
+        [
+            "overlay", "squashfs", "tmpfs", "devtmpfs", "devpts", "proc", "sysfs",
+            "cgroup", "cgroup2", "pstore", "securityfs", "debugfs", "tracefs",
+            "fusectl", "configfs", "mqueue", "hugetlbfs", "rpc_pipefs", "nsfs",
+            "bpf", "autofs", "binfmt_misc", "efivarfs", "ramfs", "rootfs",
+            "iso9660", "udf"
+        ];
+        return virtualFileSystems.Any(candidate =>
+            fstype.Equals(candidate, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string? GetJsonString(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out JsonElement value) ||
+            value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
+    }
+
+    private static bool TryGetUInt64(JsonElement element, string property, out ulong value)
+    {
+        value = 0;
+        if (!element.TryGetProperty(property, out JsonElement propertyValue) ||
+            propertyValue.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return false;
+        }
+
+        if (propertyValue.ValueKind == JsonValueKind.Number &&
+            propertyValue.TryGetUInt64(out value))
+        {
+            return true;
+        }
+
+        return propertyValue.ValueKind == JsonValueKind.String &&
+               ulong.TryParse(propertyValue.GetString(), NumberStyles.Integer,
+                   CultureInfo.InvariantCulture, out value);
     }
 
     private async Task<ProbeValue<IReadOnlyList<EncryptionVolume>>> CollectEncryptionAsync(

@@ -8,7 +8,9 @@ and macOS devices and posts a versioned JSON document to an HTTPS endpoint.
 - Device name, firmware serial number, manufacturer, and model (system SKU)
 - Operating system name, version, display version, build, and kernel
 - Installed and available OS/security updates
-- CPU model/core counts, total memory, and mounted disk capacity/free space
+- CPU model/core counts, total memory, and block devices (Linux reports
+  partition names such as `nvme0n1p1`, excluding loop devices and virtual
+  filesystems like tmpfs/overlay/squashfs)
 - BitLocker, LUKS/dm-crypt, or FileVault state
 - Windows BitLocker numerical recovery passwords and their key protector IDs
 - AD/Entra/workplace, realmd/SSSD, Apple AD, and MDM workspace state
