@@ -9,7 +9,7 @@
         <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
         <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Inventory connection" />
         <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="30" Transparent="yes" NoPrefix="yes"
-                 Text="Confirm or edit the HTTPS inventory URL and authentication. Existing values are loaded when present." />
+                 Text="Enter the HTTPS inventory URL and exactly one auth secret. On upgrade, leave auth blank to keep the existing secret." />
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
 
         <Control Id="EndpointLabel" Type="Text" X="25" Y="70" Width="320" Height="12" Text="Endpoint (https://...)" />
@@ -26,16 +26,23 @@
           <Publish Event="NewDialog" Value="LicenseAgreementDlg" />
         </Control>
         <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
+          <!-- MSI: PROP="" is false when unset. Use PROP / NOT PROP. Password boxes cannot show secrets — restore saved auth when both left blank. -->
+          <Publish Property="BEARERTOKEN" Value="[BT_EXISTING]" Order="1"
+                   Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT AK_EXISTING" />
+          <Publish Property="APIKEY" Value="[AK_EXISTING]" Order="2"
+                   Condition="NOT BEARERTOKEN AND NOT APIKEY AND AK_EXISTING" />
+          <Publish Property="BEARERTOKEN" Value="[BT_EXISTING]" Order="3"
+                   Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING" />
           <Publish
               Event="SpawnDialog"
               Value="InvalidConfigDlg"
-              Order="1"
-              Condition="ENDPOINT = &quot;&quot; OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;))" />
+              Order="4"
+              Condition="NOT ENDPOINT OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
           <Publish
               Event="NewDialog"
               Value="InstallDirDlg"
-              Order="2"
-              Condition="ENDPOINT &lt;&gt; &quot;&quot; AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;))" />
+              Order="5"
+              Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
         </Control>
         <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
           <Publish Event="SpawnDialog" Value="CancelDlg" />

@@ -13,10 +13,13 @@
     <MediaTemplate EmbedCab="yes" />
     <WixVariable Id="WixUILicenseRtf" Value="$(var.SourceDir)\License.rtf" />
 
-    <!-- Public properties; AppSearch results are applied only when not already set (command line wins). -->
+    <!-- Public + Secure so UI values pass into the elevated execute sequence. -->
     <Property Id="ENDPOINT" Secure="yes" />
     <Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
     <Property Id="APIKEY" Secure="yes" Hidden="yes" />
+    <!-- Existing auth kept separate from password edit boxes (those cannot display secrets and clear on Next). -->
+    <Property Id="BT_EXISTING" Secure="yes" Hidden="yes" />
+    <Property Id="AK_EXISTING" Secure="yes" Hidden="yes" />
 
     <Property Id="EP_HKLM" Secure="yes">
       <RegistrySearch
@@ -145,7 +148,7 @@
 
     <UIRef Id="AssetBeeDroneUI" />
 
-    <!-- Before AppSearch: copy appsettings.json into registry so RegistrySearch can pre-fill the UI. -->
+    <!-- Before AppSearch: copy appsettings.json into registry so RegistrySearch can pre-fill. -->
     <SetProperty
         Id="LoadExistingSettings"
         Sequence="first"
@@ -160,13 +163,18 @@
         Impersonate="yes"
         Return="ignore" />
 
-    <!-- Prefer HKLM, then HKCU; never overwrite values supplied on the msiexec command line. -->
+    <!-- Endpoint goes into the visible edit; auth goes into *_EXISTING (not password edits). -->
     <CustomAction Id="SetEndpointFromHklm" Property="ENDPOINT" Value="[EP_HKLM]" />
     <CustomAction Id="SetEndpointFromHkcu" Property="ENDPOINT" Value="[EP_HKCU]" />
-    <CustomAction Id="SetBearerFromHklm" Property="BEARERTOKEN" Value="[BT_HKLM]" />
-    <CustomAction Id="SetBearerFromHkcu" Property="BEARERTOKEN" Value="[BT_HKCU]" />
-    <CustomAction Id="SetApiKeyFromHklm" Property="APIKEY" Value="[AK_HKLM]" />
-    <CustomAction Id="SetApiKeyFromHkcu" Property="APIKEY" Value="[AK_HKCU]" />
+    <CustomAction Id="SetBearerExistingFromHklm" Property="BT_EXISTING" Value="[BT_HKLM]" />
+    <CustomAction Id="SetBearerExistingFromHkcu" Property="BT_EXISTING" Value="[BT_HKCU]" />
+    <CustomAction Id="SetApiKeyExistingFromHklm" Property="AK_EXISTING" Value="[AK_HKLM]" />
+    <CustomAction Id="SetApiKeyExistingFromHkcu" Property="AK_EXISTING" Value="[AK_HKCU]" />
+
+    <!-- Re-apply saved auth if password fields were left blank (UI or silent upgrade). -->
+    <CustomAction Id="RestoreBearerOnly" Property="BEARERTOKEN" Value="[BT_EXISTING]" />
+    <CustomAction Id="RestoreApiKeyOnly" Property="APIKEY" Value="[AK_EXISTING]" />
+    <CustomAction Id="RestoreBearerPrefer" Property="BEARERTOKEN" Value="[BT_EXISTING]" />
 
     <SetProperty
         Id="WriteAppSettings"
@@ -194,36 +202,40 @@
       <Custom Action="LoadExistingSettings" Before="AppSearch" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
-      <Custom Action="SetBearerFromHklm" After="AppSearch" Condition="NOT BEARERTOKEN AND BT_HKLM" />
-      <Custom Action="SetBearerFromHkcu" After="SetBearerFromHklm" Condition="NOT BEARERTOKEN AND BT_HKCU" />
-      <Custom Action="SetApiKeyFromHklm" After="AppSearch" Condition="NOT APIKEY AND AK_HKLM" />
-      <Custom Action="SetApiKeyFromHkcu" After="SetApiKeyFromHklm" Condition="NOT APIKEY AND AK_HKCU" />
+      <Custom Action="SetBearerExistingFromHklm" After="AppSearch" Condition="NOT BT_EXISTING AND BT_HKLM" />
+      <Custom Action="SetBearerExistingFromHkcu" After="SetBearerExistingFromHklm" Condition="NOT BT_EXISTING AND BT_HKCU" />
+      <Custom Action="SetApiKeyExistingFromHklm" After="AppSearch" Condition="NOT AK_EXISTING AND AK_HKLM" />
+      <Custom Action="SetApiKeyExistingFromHkcu" After="SetApiKeyExistingFromHklm" Condition="NOT AK_EXISTING AND AK_HKCU" />
     </InstallUISequence>
 
     <InstallExecuteSequence>
       <Custom Action="LoadExistingSettings" Before="AppSearch" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
-      <Custom Action="SetBearerFromHklm" After="AppSearch" Condition="NOT BEARERTOKEN AND BT_HKLM" />
-      <Custom Action="SetBearerFromHkcu" After="SetBearerFromHklm" Condition="NOT BEARERTOKEN AND BT_HKCU" />
-      <Custom Action="SetApiKeyFromHklm" After="AppSearch" Condition="NOT APIKEY AND AK_HKLM" />
-      <Custom Action="SetApiKeyFromHkcu" After="SetApiKeyFromHklm" Condition="NOT APIKEY AND AK_HKCU" />
+      <Custom Action="SetBearerExistingFromHklm" After="AppSearch" Condition="NOT BT_EXISTING AND BT_HKLM" />
+      <Custom Action="SetBearerExistingFromHkcu" After="SetBearerExistingFromHklm" Condition="NOT BT_EXISTING AND BT_HKCU" />
+      <Custom Action="SetApiKeyExistingFromHklm" After="AppSearch" Condition="NOT AK_EXISTING AND AK_HKLM" />
+      <Custom Action="SetApiKeyExistingFromHkcu" After="SetApiKeyExistingFromHklm" Condition="NOT AK_EXISTING AND AK_HKCU" />
+      <!-- Prefer values from UI/cmdline; otherwise restore saved auth. -->
+      <Custom Action="RestoreBearerOnly" After="SetApiKeyExistingFromHkcu" Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT AK_EXISTING AND NOT REMOVE" />
+      <Custom Action="RestoreApiKeyOnly" After="RestoreBearerOnly" Condition="NOT BEARERTOKEN AND NOT APIKEY AND AK_EXISTING AND NOT REMOVE" />
+      <Custom Action="RestoreBearerPrefer" After="RestoreApiKeyOnly" Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT REMOVE" />
       <Custom
           Action="RequireEndpoint"
           Before="InstallInitialize"
-          Condition="ENDPOINT = &quot;&quot; AND NOT REMOVE" />
+          Condition="NOT ENDPOINT AND NOT REMOVE" />
       <Custom
           Action="RequireHttps"
           Before="InstallInitialize"
-          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) AND NOT REMOVE" />
+          Condition="ENDPOINT AND NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) AND NOT REMOVE" />
       <Custom
           Action="RequireAuth"
           Before="InstallInitialize"
-          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;)) AND NOT REMOVE" />
+          Condition="ENDPOINT AND NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN)) AND NOT REMOVE" />
       <Custom
           Action="WriteAppSettings"
           Before="StartServices"
-          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT REMOVE" />
+          Condition="ENDPOINT AND NOT REMOVE" />
       <Custom
           Action="LaunchTray"
           After="InstallFinalize"
