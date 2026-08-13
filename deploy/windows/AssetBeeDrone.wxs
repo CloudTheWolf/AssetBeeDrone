@@ -43,6 +43,7 @@
         <CreateFolder>
           <util:PermissionEx User="SYSTEM" GenericAll="yes" />
           <util:PermissionEx User="Administrators" GenericAll="yes" />
+          <util:PermissionEx User="Users" GenericRead="yes" GenericExecute="yes" />
         </CreateFolder>
         <RemoveFile Id="RemoveAppSettings" Name="appsettings.json" On="uninstall" />
       </Component>
@@ -75,6 +76,16 @@
             ResetPeriodInDays="1" />
       </Component>
 
+      <Component Id="TrayBinary" Guid="E4F5A6B7-C8D9-0123-4567-89ABCDEF0123">
+        <File Id="TrayExe" Source="$(var.PublishDir)\AssetBee.Drone.Tray.exe" KeyPath="yes" />
+        <RegistryValue
+            Root="HKLM"
+            Key="Software\Microsoft\Windows\CurrentVersion\Run"
+            Name="AssetBeeDroneTray"
+            Type="string"
+            Value="&quot;[#TrayExe]&quot;" />
+      </Component>
+
       <Component Id="WriteAppSettingsScript" Guid="C2D3E4F5-A6B7-8901-2345-6789ABCDEF01">
         <File Id="WriteAppSettingsPs1" Source="$(var.SourceDir)\WriteAppSettings.ps1" KeyPath="yes" />
       </Component>
@@ -97,6 +108,15 @@
         Impersonate="no"
         Return="check" />
 
+    <!-- Launch tray in the interactive user session after install. -->
+    <CustomAction
+        Id="LaunchTray"
+        FileRef="TrayExe"
+        ExeCommand=""
+        Execute="immediate"
+        Impersonate="yes"
+        Return="asyncNoWait" />
+
     <InstallExecuteSequence>
       <Custom
           Action="RequireEndpoint"
@@ -110,11 +130,14 @@
           Action="RequireAuth"
           Before="InstallInitialize"
           Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;)) AND NOT REMOVE" />
-      <!-- Write settings only when the user supplied new values; upgrades keep existing appsettings.json. -->
       <Custom
           Action="WriteAppSettings"
           Before="StartServices"
           Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT REMOVE" />
+      <Custom
+          Action="LaunchTray"
+          After="InstallFinalize"
+          Condition="NOT REMOVE" />
     </InstallExecuteSequence>
   </Package>
 </Wix>

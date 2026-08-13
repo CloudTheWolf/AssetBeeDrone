@@ -160,6 +160,8 @@ msiexec /i AssetBee.Drone-1.0.0-win-x64.msi /qn `
 
 Upgrade / reinstall: run the new MSI without `ENDPOINT` / auth properties to keep the existing `appsettings.json`. Pass those properties only when you want to change the connection settings.
 
+The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time and choose **Sync Now**. Exit closes only the tray helper; the `AssetBeeDrone` service keeps running.
+
 **Portable archive / publish folder**
 
 ```powershell
@@ -169,9 +171,10 @@ Upgrade / reinstall: run the new MSI without `ENDPOINT` / auth properties to kee
   -BearerToken 'secret'
 ```
 
-Registers `AssetBeeDrone` as an automatic LocalSystem service and locks the
-install directory ACL. Uninstall with `deploy/windows/uninstall.ps1` or
-Add/Remove Programs for the MSI.
+Registers `AssetBeeDrone` as an automatic LocalSystem service, installs the tray
+helper (HKLM Run), and locks secrets in `appsettings.json` to SYSTEM/Administrators
+while allowing Users to run the tray binary. Uninstall with
+`deploy/windows/uninstall.ps1` or Add/Remove Programs for the MSI.
 
 ### Linux
 

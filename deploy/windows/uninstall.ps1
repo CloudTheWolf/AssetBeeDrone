@@ -4,6 +4,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $serviceName = 'AssetBeeDrone'
+$runKeyPath = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run'
+$runValueName = 'AssetBeeDroneTray'
+
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).
+    IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'Run this script from an elevated PowerShell session.'
+}
+
+Get-Process -Name 'AssetBee.Drone.Tray' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+if (Get-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue) {
+    Remove-ItemProperty -Path $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue
+}
 
 if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
     Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue

@@ -30,6 +30,22 @@ if (-not (Test-Path -LiteralPath $exe)) {
     throw "Published binary not found: $exe"
 }
 
+Write-Host 'Publishing tray application into publish directory...'
+& dotnet publish (Join-Path $repoRoot 'AssetBeeDrone.Tray\AssetBeeDrone.Tray.csproj') `
+    -c Release `
+    -r win-x64 `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -o $PublishDirectory
+if ($LASTEXITCODE -ne 0) {
+    throw "Tray publish failed with exit code $LASTEXITCODE"
+}
+
+$tray = Join-Path $PublishDirectory 'AssetBee.Drone.Tray.exe'
+if (-not (Test-Path -LiteralPath $tray)) {
+    throw "Tray binary not found after publish: $tray"
+}
+
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
     Write-Host 'WiX CLI not found on PATH; installing via dotnet tool...'
     & dotnet tool update --global wix --version 5.0.2

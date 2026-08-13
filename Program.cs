@@ -47,11 +47,15 @@ builder.Services.AddHttpClient<IInventoryReporter, HttpInventoryReporter>((servi
     client.Timeout = options.RequestTimeout;
     client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetBee-Drone/1.0");
 });
-builder.Services.AddHostedService<InventoryWorker>();
+builder.Services.AddSingleton<InventoryWorker>();
+builder.Services.AddSingleton<IInventorySyncController>(services =>
+    services.GetRequiredService<InventoryWorker>());
+builder.Services.AddHostedService(services => services.GetRequiredService<InventoryWorker>());
 
 if (OperatingSystem.IsWindows())
 {
     builder.Services.AddWindowsService(options => options.ServiceName = "AssetBee Drone");
+    builder.Services.AddHostedService<TrayCommandServer>();
 }
 else if (OperatingSystem.IsLinux())
 {

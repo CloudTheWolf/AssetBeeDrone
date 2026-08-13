@@ -31,6 +31,17 @@ if ($Rid -notlike 'win-*') {
 $PublishDirectory = (Resolve-Path -LiteralPath $PublishDirectory).Path
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
+Write-Host 'Publishing tray application into publish directory...'
+& dotnet publish (Join-Path $repoRoot 'AssetBeeDrone.Tray\AssetBeeDrone.Tray.csproj') `
+    -c Release `
+    -r win-x64 `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -o $PublishDirectory
+if ($LASTEXITCODE -ne 0) {
+    throw "Tray publish failed with exit code $LASTEXITCODE"
+}
+
 $stageRoot = Join-Path ([IO.Path]::GetTempPath()) ("assetbee-archive-" + [guid]::NewGuid().ToString('N'))
 $payload = Join-Path $stageRoot "AssetBee.Drone-$Version-$Rid"
 try {
@@ -67,6 +78,9 @@ From an elevated PowerShell session:
     -PublishDirectory .\bin ``
     -Endpoint https://inventory.example.com/api/v1/inventory ``
     -BearerToken 'secret'
+
+The installer starts the AssetBeeDrone service and the AssetBee.Drone.Tray
+notification-area helper (Sync Now / last sync time).
 
 Uninstall:
 
