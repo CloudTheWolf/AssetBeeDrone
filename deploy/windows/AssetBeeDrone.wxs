@@ -15,7 +15,6 @@
     <Property Id="ENDPOINT" Secure="yes" />
     <Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
     <Property Id="APIKEY" Secure="yes" Hidden="yes" />
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
     <!-- Fresh silent installs must still supply config; upgrades may keep existing appsettings.json. -->
     <CustomAction
