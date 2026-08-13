@@ -64,7 +64,7 @@ command -v pkgbuild >/dev/null 2>&1 || {
 }
 
 if [ -z "$version" ]; then
-  version="$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' "$repo_root/AssetBeeDrone.csproj" | head -n 1)"
+  version="$(sh "$repo_root/deploy/packaging/get-version.sh")"
 fi
 [ -n "$version" ] || {
   echo "Unable to determine version." >&2

@@ -50,6 +50,28 @@ $settingsPath = Join-Path $Destination 'appsettings.json'
     /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' 'Users:(OI)(CI)RX' | Out-Null
 & icacls.exe $settingsPath /inheritance:r /grant:r 'SYSTEM:F' 'Administrators:F' | Out-Null
 
+# Mirror into registry so the next upgrade/reinstall can pre-fill the MSI UI.
+function Write-DroneRegMirror {
+    param([Parameter(Mandatory = $true)][string] $RegPath)
+
+    New-Item -Path $RegPath -Force | Out-Null
+    Set-ItemProperty -Path $RegPath -Name 'Endpoint' -Value $Endpoint.AbsoluteUri
+    if ($BearerToken) {
+        Set-ItemProperty -Path $RegPath -Name 'BearerToken' -Value $BearerToken
+        Remove-ItemProperty -Path $RegPath -Name 'ApiKey' -ErrorAction SilentlyContinue
+    } elseif ($ApiKey) {
+        Set-ItemProperty -Path $RegPath -Name 'ApiKey' -Value $ApiKey
+        Remove-ItemProperty -Path $RegPath -Name 'BearerToken' -ErrorAction SilentlyContinue
+    }
+}
+
+Write-DroneRegMirror -RegPath 'HKLM:\SOFTWARE\AssetBee\Drone'
+try {
+    Write-DroneRegMirror -RegPath 'HKCU:\SOFTWARE\AssetBee\Drone'
+} catch {
+}
+
+
 $binary = Join-Path $Destination 'AssetBee.Drone.exe'
 & sc.exe create $serviceName binPath= "`"$binary`"" start= auto obj= LocalSystem `
     DisplayName= 'AssetBee Drone' | Out-Null

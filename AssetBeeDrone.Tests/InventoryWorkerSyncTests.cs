@@ -66,7 +66,7 @@ public sealed class InventoryWorkerSyncTests
     }
 
     [Fact]
-    public void Tray_protocol_round_trips_camel_case_json()
+    public void Tray_status_json_round_trips_camel_case()
     {
         TrayStatusResponse response = new(
             DateTimeOffset.Parse("2026-01-01T12:00:00Z"),
@@ -74,17 +74,19 @@ public sealed class InventoryWorkerSyncTests
             null,
             Running: false,
             Busy: false,
-            Message: "Sync completed.");
+            Message: "Sync completed.",
+            ServiceAliveUtc: DateTimeOffset.Parse("2026-01-01T12:02:00Z"));
 
         string json = System.Text.Json.JsonSerializer.Serialize(
             response,
             TrayJsonContext.Default.TrayStatusResponse);
         Assert.Contains("\"lastSuccessUtc\"", json);
+        Assert.Contains("\"serviceAliveUtc\"", json);
 
-        TrayCommand? command = System.Text.Json.JsonSerializer.Deserialize(
-            """{"op":"sync"}""",
-            TrayJsonContext.Default.TrayCommand);
-        Assert.Equal("sync", command!.Op);
+        TrayStatusResponse? parsed = System.Text.Json.JsonSerializer.Deserialize(
+            json,
+            TrayJsonContext.Default.TrayStatusResponse);
+        Assert.Equal(response.ServiceAliveUtc, parsed!.ServiceAliveUtc);
     }
 
     private static InventoryWorker CreateWorker(

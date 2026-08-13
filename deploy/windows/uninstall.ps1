@@ -27,4 +27,9 @@ if (Test-Path $Destination) {
     Remove-Item -Path $Destination -Recurse -Force
 }
 
+Remove-Item -Path 'HKLM:\SOFTWARE\AssetBee\Drone' -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path 'HKLM:\SOFTWARE\AssetBee' -Force -ErrorAction SilentlyContinue
+Remove-Item -Path 'HKCU:\SOFTWARE\AssetBee\Drone' -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path 'HKCU:\SOFTWARE\AssetBee' -Force -ErrorAction SilentlyContinue
+
 Write-Host 'AssetBee Drone uninstalled.'

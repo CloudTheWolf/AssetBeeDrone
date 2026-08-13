@@ -2,6 +2,8 @@ namespace AssetBeeDrone.Tray;
 
 internal sealed class TrayApplicationContext : ApplicationContext
 {
+    private static readonly TimeSpan ServiceAliveMaxAge = TimeSpan.FromSeconds(5);
+
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _lastSyncItem;
     private readonly ToolStripMenuItem _syncNowItem;
@@ -14,7 +16,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             Enabled = false
         };
-        _syncNowItem = new ToolStripMenuItem("Sync Now", null, async (_, _) => await SyncNowAsync());
+        _syncNowItem = new ToolStripMenuItem("Sync Now", null, (_, _) => SyncNow());
 
         ContextMenuStrip menu = new();
         menu.Items.Add(_lastSyncItem);
@@ -22,7 +24,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_syncNowItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitTray()));
-        menu.Opening += async (_, _) => await RefreshStatusAsync();
+        menu.Opening += (_, _) => RefreshStatus();
 
         _notifyIcon = new NotifyIcon
         {
@@ -32,11 +34,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ContextMenuStrip = menu
         };
 
-        _refreshTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
-        _refreshTimer.Tick += async (_, _) => await RefreshStatusAsync();
+        _refreshTimer = new System.Windows.Forms.Timer { Interval = 1_000 };
+        _refreshTimer.Tick += (_, _) => RefreshStatus();
         _refreshTimer.Start();
 
-        _ = RefreshStatusAsync();
+        RefreshStatus();
     }
 
     private static Icon LoadIcon()
@@ -57,26 +59,32 @@ internal sealed class TrayApplicationContext : ApplicationContext
         return SystemIcons.Application;
     }
 
-    private async Task RefreshStatusAsync()
+    private void RefreshStatus()
     {
         try
         {
-            TrayStatusResponse? status = await TrayPipeClient.SendAsync("status", CancellationToken.None);
+            TrayStatusResponse? status = TrayFileIpcClient.ReadStatus();
             if (status is null)
             {
-                SetUnavailable("No response from service.");
+                SetUnavailable("Waiting for service status file.");
+                return;
+            }
+
+            if (!TrayFileIpcClient.IsServiceAlive(status, ServiceAliveMaxAge))
+            {
+                SetUnavailable("Service status is stale. Is AssetBeeDrone running?");
                 return;
             }
 
             ApplyStatus(status);
         }
-        catch
+        catch (Exception exception)
         {
-            SetUnavailable("Service unavailable");
+            SetUnavailable(exception.Message);
         }
     }
 
-    private async Task SyncNowAsync()
+    private void SyncNow()
     {
         if (_syncInFlight)
         {
@@ -87,31 +95,28 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _syncNowItem.Enabled = false;
         try
         {
-            TrayStatusResponse? status = await TrayPipeClient.SendAsync("sync", CancellationToken.None);
-            if (status is null)
+            TrayStatusResponse? before = TrayFileIpcClient.ReadStatus();
+            if (before is null || !TrayFileIpcClient.IsServiceAlive(before, ServiceAliveMaxAge))
             {
-                ShowTip("AssetBee Drone", "No response from service.", ToolTipIcon.Warning);
-                SetUnavailable("No response from service.");
+                ShowTip("AssetBee Drone", "Service is not running.", ToolTipIcon.Warning);
+                SetUnavailable("Service is not running.");
                 return;
             }
 
-            ApplyStatus(status);
-            if (status.Busy)
+            if (before.Busy || before.Running)
             {
-                ShowTip("AssetBee Drone", status.Message ?? "Sync already in progress.", ToolTipIcon.Info);
+                ShowTip("AssetBee Drone", before.Message ?? "Sync already in progress.", ToolTipIcon.Info);
+                ApplyStatus(before);
+                return;
             }
-            else if (!string.IsNullOrWhiteSpace(status.LastError))
-            {
-                ShowTip("AssetBee Drone", status.LastError, ToolTipIcon.Warning);
-            }
-            else
-            {
-                ShowTip("AssetBee Drone", status.Message ?? "Sync completed.", ToolTipIcon.Info);
-            }
+
+            TrayFileIpcClient.RequestSync();
+            ShowTip("AssetBee Drone", "Sync requested.", ToolTipIcon.Info);
+            RefreshStatus();
         }
         catch (Exception exception)
         {
-            SetUnavailable("Service unavailable");
+            SetUnavailable(exception.Message);
             ShowTip("AssetBee Drone", $"Sync failed: {exception.Message}", ToolTipIcon.Error);
         }
         finally
@@ -133,13 +138,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 ? "AssetBee Drone — running"
                 : "AssetBee Drone — last sync had errors";
         _notifyIcon.Text = TruncateTip(tooltip);
-        _syncNowItem.Enabled = !_syncInFlight && !status.Busy;
+        _syncNowItem.Enabled = !_syncInFlight && !status.Busy && !status.Running;
     }
 
     private void SetUnavailable(string detail)
     {
-        _lastSyncItem.Text = "Last sync: Unavailable";
-        _notifyIcon.Text = TruncateTip($"AssetBee Drone — unavailable ({detail})");
+        _lastSyncItem.Text = string.IsNullOrWhiteSpace(detail)
+            ? "Last sync: Unavailable"
+            : TruncateTip($"Unavailable: {detail}");
+        _notifyIcon.Text = TruncateTip("AssetBee Drone — unavailable");
         _syncNowItem.Enabled = !_syncInFlight;
     }
 

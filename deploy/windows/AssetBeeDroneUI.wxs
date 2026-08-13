@@ -8,18 +8,18 @@
       <Dialog Id="ConfigDlg" Width="370" Height="270" Title="AssetBee Drone Setup">
         <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
         <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Inventory connection" />
-        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="20" Transparent="yes" NoPrefix="yes"
-                 Text="Enter the HTTPS inventory URL and exactly one authentication secret." />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="30" Transparent="yes" NoPrefix="yes"
+                 Text="Confirm or edit the HTTPS inventory URL and authentication. Existing values are loaded when present." />
         <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
 
-        <Control Id="EndpointLabel" Type="Text" X="25" Y="60" Width="320" Height="12" Text="Endpoint (https://...)" />
-        <Control Id="EndpointEdit" Type="Edit" X="25" Y="74" Width="320" Height="18" Property="ENDPOINT" />
+        <Control Id="EndpointLabel" Type="Text" X="25" Y="70" Width="320" Height="12" Text="Endpoint (https://...)" />
+        <Control Id="EndpointEdit" Type="Edit" X="25" Y="84" Width="320" Height="18" Property="ENDPOINT" />
 
-        <Control Id="BearerLabel" Type="Text" X="25" Y="104" Width="320" Height="12" Text="Bearer token (leave blank if using API key)" />
-        <Control Id="BearerEdit" Type="Edit" X="25" Y="118" Width="320" Height="18" Property="BEARERTOKEN" Password="yes" />
+        <Control Id="BearerLabel" Type="Text" X="25" Y="114" Width="320" Height="12" Text="Bearer token (leave blank if using API key)" />
+        <Control Id="BearerEdit" Type="Edit" X="25" Y="128" Width="320" Height="18" Property="BEARERTOKEN" Password="yes" />
 
-        <Control Id="ApiKeyLabel" Type="Text" X="25" Y="148" Width="320" Height="12" Text="API key (leave blank if using bearer token)" />
-        <Control Id="ApiKeyEdit" Type="Edit" X="25" Y="162" Width="320" Height="18" Property="APIKEY" Password="yes" />
+        <Control Id="ApiKeyLabel" Type="Text" X="25" Y="158" Width="320" Height="12" Text="API key (leave blank if using bearer token)" />
+        <Control Id="ApiKeyEdit" Type="Edit" X="25" Y="172" Width="320" Height="18" Property="APIKEY" Password="yes" />
 
         <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
         <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
@@ -51,24 +51,14 @@
         </Control>
       </Dialog>
 
-      <!--
-        WixUI_InstallDir LicenseAgreementDlg -> InstallDirDlg uses NewDialog Order 1.
-        Use higher Order values so first-time installs without msiexec properties visit ConfigDlg.
-      -->
+      <!-- Always show ConfigDlg so upgrades can review/pre-filled existing settings. -->
       <Publish
           Dialog="LicenseAgreementDlg"
           Control="Next"
           Event="NewDialog"
           Value="ConfigDlg"
           Order="5"
-          Condition="LicenseAccepted = &quot;1&quot; AND NOT WIX_UPGRADE_DETECTED AND ENDPOINT = &quot;&quot;" />
-      <Publish
-          Dialog="LicenseAgreementDlg"
-          Control="Next"
-          Event="NewDialog"
-          Value="InstallDirDlg"
-          Order="6"
-          Condition="LicenseAccepted = &quot;1&quot; AND (WIX_UPGRADE_DETECTED OR ENDPOINT &lt;&gt; &quot;&quot;)" />
+          Condition="LicenseAccepted = &quot;1&quot;" />
     </UI>
   </Fragment>
 </Wix>

@@ -13,11 +13,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir '..\..')).Path
 
 if (-not $Version) {
-    [xml] $csproj = Get-Content -LiteralPath (Join-Path $repoRoot 'AssetBeeDrone.csproj')
-    $Version = $csproj.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-    if (-not $Version) {
-        throw 'Unable to determine Version from AssetBeeDrone.csproj. Pass -Version.'
-    }
+    $Version = & (Join-Path $repoRoot 'deploy\packaging\get-version.ps1') -RepoRoot $repoRoot
 }
 
 if (-not $OutputDirectory) {
@@ -31,12 +27,14 @@ if ($Rid -notlike 'win-*') {
 $PublishDirectory = (Resolve-Path -LiteralPath $PublishDirectory).Path
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
+Write-Host "Building archive version $Version"
 Write-Host 'Publishing tray application into publish directory...'
 & dotnet publish (Join-Path $repoRoot 'AssetBeeDrone.Tray\AssetBeeDrone.Tray.csproj') `
     -c Release `
     -r win-x64 `
     --self-contained true `
     -p:PublishSingleFile=true `
+    -p:Version=$Version `
     -o $PublishDirectory
 if ($LASTEXITCODE -ne 0) {
     throw "Tray publish failed with exit code $LASTEXITCODE"

@@ -13,14 +13,64 @@
     <MediaTemplate EmbedCab="yes" />
     <WixVariable Id="WixUILicenseRtf" Value="$(var.SourceDir)\License.rtf" />
 
+    <!-- Public properties; AppSearch results are applied only when not already set (command line wins). -->
     <Property Id="ENDPOINT" Secure="yes" />
     <Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
     <Property Id="APIKEY" Secure="yes" Hidden="yes" />
 
-    <!-- Fresh silent installs must still supply config; upgrades may keep existing appsettings.json. -->
+    <Property Id="EP_HKLM" Secure="yes">
+      <RegistrySearch
+          Id="ExistingEndpointHklm"
+          Root="HKLM"
+          Key="SOFTWARE\AssetBee\Drone"
+          Name="Endpoint"
+          Type="raw" />
+    </Property>
+    <Property Id="BT_HKLM" Secure="yes" Hidden="yes">
+      <RegistrySearch
+          Id="ExistingBearerHklm"
+          Root="HKLM"
+          Key="SOFTWARE\AssetBee\Drone"
+          Name="BearerToken"
+          Type="raw" />
+    </Property>
+    <Property Id="AK_HKLM" Secure="yes" Hidden="yes">
+      <RegistrySearch
+          Id="ExistingApiKeyHklm"
+          Root="HKLM"
+          Key="SOFTWARE\AssetBee\Drone"
+          Name="ApiKey"
+          Type="raw" />
+    </Property>
+
+    <Property Id="EP_HKCU" Secure="yes">
+      <RegistrySearch
+          Id="ExistingEndpointHkcu"
+          Root="HKCU"
+          Key="SOFTWARE\AssetBee\Drone"
+          Name="Endpoint"
+          Type="raw" />
+    </Property>
+    <Property Id="BT_HKCU" Secure="yes" Hidden="yes">
+      <RegistrySearch
+          Id="ExistingBearerHkcu"
+          Root="HKCU"
+          Key="SOFTWARE\AssetBee\Drone"
+          Name="BearerToken"
+          Type="raw" />
+    </Property>
+    <Property Id="AK_HKCU" Secure="yes" Hidden="yes">
+      <RegistrySearch
+          Id="ExistingApiKeyHkcu"
+          Root="HKCU"
+          Key="SOFTWARE\AssetBee\Drone"
+          Name="ApiKey"
+          Type="raw" />
+    </Property>
+
     <CustomAction
         Id="RequireEndpoint"
-        Error="Provide ENDPOINT via msiexec or the installer UI on first install." />
+        Error="Provide ENDPOINT via msiexec or the installer UI." />
     <CustomAction
         Id="RequireAuth"
         Error="Provide exactly one of BEARERTOKEN or APIKEY when ENDPOINT is set." />
@@ -46,6 +96,8 @@
           <util:PermissionEx User="Users" GenericRead="yes" GenericExecute="yes" />
         </CreateFolder>
         <RemoveFile Id="RemoveAppSettings" Name="appsettings.json" On="uninstall" />
+        <RemoveRegistryKey Root="HKLM" Key="SOFTWARE\AssetBee\Drone" Action="removeOnUninstall" />
+        <RemoveRegistryKey Root="HKCU" Key="SOFTWARE\AssetBee\Drone" Action="removeOnUninstall" />
       </Component>
 
       <Component Id="DroneBinary" Guid="B1C2D3E4-F5A6-7890-1234-56789ABCDEF0">
@@ -93,7 +145,29 @@
 
     <UIRef Id="AssetBeeDroneUI" />
 
-    <!-- Deferred QuietExec: command line is CustomActionData (property Id == CA Id). -->
+    <!-- Before AppSearch: copy appsettings.json into registry so RegistrySearch can pre-fill the UI. -->
+    <SetProperty
+        Id="LoadExistingSettings"
+        Sequence="first"
+        Before="LoadExistingSettings"
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$p = Join-Path $env:ProgramFiles 'AssetBee\Drone\appsettings.json'; if (-not (Test-Path -LiteralPath $p)) { exit 0 }; $j = Get-Content -LiteralPath $p -Raw | ConvertFrom-Json; if ($null -eq $j.Drone) { exit 0 }; $ep = [string]$j.Drone.Endpoint; $b = [string]$j.Drone.BearerToken; $a = [string]$j.Drone.ApiKey; function W($r) { New-Item -Path $r -Force | Out-Null; if ($ep) { Set-ItemProperty -Path $r -Name Endpoint -Value $ep }; if (-not [string]::IsNullOrWhiteSpace($b) -and $b -ne 'null') { Set-ItemProperty -Path $r -Name BearerToken -Value $b } else { Remove-ItemProperty -Path $r -Name BearerToken -EA SilentlyContinue }; if (-not [string]::IsNullOrWhiteSpace($a) -and $a -ne 'null') { Set-ItemProperty -Path $r -Name ApiKey -Value $a } else { Remove-ItemProperty -Path $r -Name ApiKey -EA SilentlyContinue } }; foreach ($r in @('HKLM:\SOFTWARE\AssetBee\Drone','HKCU:\SOFTWARE\AssetBee\Drone')) { try { W $r } catch {} }&quot;" />
+
+    <CustomAction
+        Id="LoadExistingSettings"
+        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+        DllEntry="WixQuietExec"
+        Execute="immediate"
+        Impersonate="yes"
+        Return="ignore" />
+
+    <!-- Prefer HKLM, then HKCU; never overwrite values supplied on the msiexec command line. -->
+    <CustomAction Id="SetEndpointFromHklm" Property="ENDPOINT" Value="[EP_HKLM]" />
+    <CustomAction Id="SetEndpointFromHkcu" Property="ENDPOINT" Value="[EP_HKCU]" />
+    <CustomAction Id="SetBearerFromHklm" Property="BEARERTOKEN" Value="[BT_HKLM]" />
+    <CustomAction Id="SetBearerFromHkcu" Property="BEARERTOKEN" Value="[BT_HKCU]" />
+    <CustomAction Id="SetApiKeyFromHklm" Property="APIKEY" Value="[AK_HKLM]" />
+    <CustomAction Id="SetApiKeyFromHkcu" Property="APIKEY" Value="[AK_HKCU]" />
+
     <SetProperty
         Id="WriteAppSettings"
         Sequence="execute"
@@ -108,7 +182,6 @@
         Impersonate="no"
         Return="check" />
 
-    <!-- Launch tray in the interactive user session after install. -->
     <CustomAction
         Id="LaunchTray"
         FileRef="TrayExe"
@@ -117,11 +190,28 @@
         Impersonate="yes"
         Return="asyncNoWait" />
 
+    <InstallUISequence>
+      <Custom Action="LoadExistingSettings" Before="AppSearch" Condition="NOT REMOVE" />
+      <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
+      <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
+      <Custom Action="SetBearerFromHklm" After="AppSearch" Condition="NOT BEARERTOKEN AND BT_HKLM" />
+      <Custom Action="SetBearerFromHkcu" After="SetBearerFromHklm" Condition="NOT BEARERTOKEN AND BT_HKCU" />
+      <Custom Action="SetApiKeyFromHklm" After="AppSearch" Condition="NOT APIKEY AND AK_HKLM" />
+      <Custom Action="SetApiKeyFromHkcu" After="SetApiKeyFromHklm" Condition="NOT APIKEY AND AK_HKCU" />
+    </InstallUISequence>
+
     <InstallExecuteSequence>
+      <Custom Action="LoadExistingSettings" Before="AppSearch" Condition="NOT REMOVE" />
+      <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
+      <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
+      <Custom Action="SetBearerFromHklm" After="AppSearch" Condition="NOT BEARERTOKEN AND BT_HKLM" />
+      <Custom Action="SetBearerFromHkcu" After="SetBearerFromHklm" Condition="NOT BEARERTOKEN AND BT_HKCU" />
+      <Custom Action="SetApiKeyFromHklm" After="AppSearch" Condition="NOT APIKEY AND AK_HKLM" />
+      <Custom Action="SetApiKeyFromHkcu" After="SetApiKeyFromHklm" Condition="NOT APIKEY AND AK_HKCU" />
       <Custom
           Action="RequireEndpoint"
           Before="InstallInitialize"
-          Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED AND ENDPOINT = &quot;&quot; AND NOT REMOVE" />
+          Condition="ENDPOINT = &quot;&quot; AND NOT REMOVE" />
       <Custom
           Action="RequireHttps"
           Before="InstallInitialize"

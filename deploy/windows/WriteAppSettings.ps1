@@ -1,4 +1,4 @@
-# Writes appsettings.json during MSI install.
+# Writes appsettings.json during MSI install (and mirrors values for upgrade pre-fill).
 param(
     [Parameter(Mandatory = $true)]
     [uri] $Endpoint,
@@ -43,3 +43,25 @@ $settingsPath = Join-Path $InstallDir 'appsettings.json'
 [IO.File]::WriteAllText($settingsPath, $settings)
 & icacls.exe $InstallDir /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' 'Users:(OI)(CI)RX' | Out-Null
 & icacls.exe $settingsPath /inheritance:r /grant:r 'SYSTEM:F' 'Administrators:F' | Out-Null
+
+# Mirror into registry so the next upgrade/reinstall can pre-fill the MSI UI.
+function Write-DroneRegMirror {
+    param([Parameter(Mandatory = $true)][string] $RegPath)
+
+    New-Item -Path $RegPath -Force | Out-Null
+    Set-ItemProperty -Path $RegPath -Name 'Endpoint' -Value $Endpoint.AbsoluteUri
+    if ($hasBearer) {
+        Set-ItemProperty -Path $RegPath -Name 'BearerToken' -Value $BearerToken
+        Remove-ItemProperty -Path $RegPath -Name 'ApiKey' -ErrorAction SilentlyContinue
+    } else {
+        Set-ItemProperty -Path $RegPath -Name 'ApiKey' -Value $ApiKey
+        Remove-ItemProperty -Path $RegPath -Name 'BearerToken' -ErrorAction SilentlyContinue
+    }
+}
+
+Write-DroneRegMirror -RegPath 'HKLM:\SOFTWARE\AssetBee\Drone'
+try {
+    Write-DroneRegMirror -RegPath 'HKCU:\SOFTWARE\AssetBee\Drone'
+} catch {
+    # Deferred CA runs as SYSTEM; HKCU may be unavailable — HKLM is enough for the next elevate/search.
+}

@@ -51,12 +51,14 @@ done
 [ -n "$publish_dir" ] || usage
 
 if [ -z "$version" ]; then
-  version="$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' "$repo_root/AssetBeeDrone.csproj" | head -n 1)"
+  version="$(sh "$script_dir/get-version.sh")"
 fi
 [ -n "$version" ] || {
   echo "Unable to determine version." >&2
   exit 1
 }
+
+echo "Packaging version $version"
 
 mkdir -p "$output_dir"
 

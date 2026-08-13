@@ -55,7 +55,7 @@ builder.Services.AddHostedService(services => services.GetRequiredService<Invent
 if (OperatingSystem.IsWindows())
 {
     builder.Services.AddWindowsService(options => options.ServiceName = "AssetBee Drone");
-    builder.Services.AddHostedService<TrayCommandServer>();
+    builder.Services.AddHostedService<TrayFileIpcServer>();
 }
 else if (OperatingSystem.IsLinux())
 {

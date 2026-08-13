@@ -3,6 +3,8 @@ name: Release packages
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
@@ -28,12 +30,21 @@ jobs:
             rid: osx-arm64
             publish_dir: bin/Release/net10.0/osx-arm64/publish
 
-
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          chmod +x ./deploy/packaging/get-version.sh
+          VERSION="$(./deploy/packaging/get-version.sh)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Resolved package version: $VERSION"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -41,7 +52,11 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Publish Native AOT
-        run: dotnet publish AssetBeeDrone.csproj -c Release -p:PublishProfile=${{ matrix.rid }}
+        run: >
+          dotnet publish AssetBeeDrone.csproj
+          -c Release
+          -p:PublishProfile=${{ matrix.rid }}
+          -p:Version=${{ env.VERSION }}
 
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
@@ -52,15 +67,21 @@ jobs:
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          VERSION: ${{ env.VERSION }}
         run: |
           ./deploy/packaging/build-archive.ps1 `
             -PublishDirectory '${{ matrix.publish_dir }}' `
-            -Rid '${{ matrix.rid }}'
+            -Rid '${{ matrix.rid }}' `
+            -Version $env:VERSION
           ./deploy/windows/build-msi.ps1 `
-            -PublishDirectory '${{ matrix.publish_dir }}'
+            -PublishDirectory '${{ matrix.publish_dir }}' `
+            -Version $env:VERSION
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
+        env:
+          VERSION: ${{ env.VERSION }}
         run: |
           chmod +x deploy/packaging/*.sh \
             deploy/linux/*.sh \
@@ -71,13 +92,15 @@ jobs:
             deploy/macos/packaging/scripts/postinstall
           ./deploy/packaging/build.sh \
             --rid '${{ matrix.rid }}' \
-            --publish-dir '${{ matrix.publish_dir }}'
+            --publish-dir '${{ matrix.publish_dir }}' \
+            --version "$VERSION"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AssetBee.Drone-${{ matrix.rid }}
+          name: AssetBee.Drone-${{ matrix.rid }}-${{ env.VERSION }}
           path: dist/*
+          if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/')

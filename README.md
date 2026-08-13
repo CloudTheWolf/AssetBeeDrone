@@ -122,8 +122,20 @@ dotnet publish -p:PublishProfile=osx-arm64
 
 ## Packaging
 
+Package versions are computed automatically (override with `VERSION`):
+
+1. `VERSION` environment variable, else
+2. Git tag `v*` (CI tag builds / exact tag on HEAD), else
+3. `1.0.{GITHUB_RUN_NUMBER}` on GitHub Actions, else
+4. `1.0.{git rev-list --count HEAD}` locally, else
+5. `1.0.0`
+
+Pushing to `main` runs `.github/workflows/release-packages.yml`, which publishes
+Native AOT builds and uploads packages as workflow artifacts. Pushing a `v*` tag
+also creates a GitHub Release from those artifacts.
+
 Native AOT publish and native package builds must run on the matching OS family
-(or via `.github/workflows/release-packages.yml`). After publishing a RID:
+(or via that workflow). After publishing a RID:
 
 ```sh
 # Linux / macOS host
@@ -147,20 +159,20 @@ time.
 
 **MSI**
 
-Interactive (no properties required): double-click the MSI or run `msiexec /i AssetBee.Drone-1.0.0-win-x64.msi`. The wizard prompts for endpoint and bearer token or API key on first install.
+Interactive (no properties required): double-click the MSI or run `msiexec /i AssetBee.Drone-<version>-win-x64.msi`. The wizard prompts for endpoint and bearer token or API key. On upgrade or reinstall, it reads the existing `appsettings.json` (when present) and pre-fills those fields; you can confirm or change them before continuing.
 
 Silent first install:
 
 ```powershell
-msiexec /i AssetBee.Drone-1.0.0-win-x64.msi /qn `
+msiexec /i AssetBee.Drone-<version>-win-x64.msi /qn `
   ENDPOINT=https://inventory.example.com/api/v1/inventory `
   BEARERTOKEN=secret
 # or APIKEY=secret
 ```
 
-Upgrade / reinstall: run the new MSI without `ENDPOINT` / auth properties to keep the existing `appsettings.json`. Pass those properties only when you want to change the connection settings.
+Silent upgrade / reinstall: run the new MSI without `ENDPOINT` / auth properties to keep the existing settings (loaded from disk/registry). Pass those properties only when you want to change the connection settings.
 
-The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time and choose **Sync Now**. Exit closes only the tray helper; the `AssetBeeDrone` service keeps running.
+The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time and choose **Sync Now**. Exit closes only the tray helper; the `AssetBeeDrone` service keeps running. The tray talks to the service through `%ProgramData%\AssetBee\Drone\` (status heartbeat + sync request files).
 
 **Portable archive / publish folder**
 
@@ -182,7 +194,7 @@ while allowing Users to run the tray binary. Uninstall with
 
 ```sh
 sudo deploy/linux/packaging/install-package.sh \
-  dist/AssetBee.Drone-1.0.0-linux-x64.deb \
+  dist/AssetBee.Drone-<version>-linux-x64.deb \
   --endpoint https://inventory.example.com/api/v1/inventory \
   --bearer-token secret
 ```
@@ -209,7 +221,7 @@ sudo deploy/linux/uninstall.sh
 
 ```sh
 sudo deploy/macos/packaging/install-package.sh \
-  dist/AssetBee.Drone-1.0.0-osx-arm64.pkg \
+  dist/AssetBee.Drone-<version>-osx-arm64.pkg \
   --endpoint https://inventory.example.com/api/v1/inventory \
   --bearer-token secret
 ```
