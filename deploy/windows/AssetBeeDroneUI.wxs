@@ -1,125 +1,410 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Fragment>
-    <UI Id="AssetBeeDroneUI">
-      <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
 
-      <!-- Same version already installed: choose reinstall (keep config) or uninstall. -->
-      <Dialog Id="SameVersionDlg" Width="370" Height="220" Title="AssetBee Drone Setup">
-        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
-        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes"
-                 Text="{\WixUI_Font_Title}AssetBee Drone $(var.Version) is already installed" />
-        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="30" Transparent="yes" NoPrefix="yes"
-                 Text="Choose whether to reinstall this version or uninstall it from the computer." />
-        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+	<Fragment>
 
-        <Control Id="Info" Type="Text" X="25" Y="60" Width="320" Height="80" NoPrefix="yes"
-                 Text="Reinstall replaces the program files and keeps your existing inventory endpoint and credentials. Uninstall removes AssetBee Drone from this computer." />
+		<UI Id="AssetBeeDroneUI">
 
-        <Control Id="BottomLine" Type="Line" X="0" Y="184" Width="370" Height="0" />
-        <Control Id="Uninstall" Type="PushButton" X="116" Y="195" Width="70" Height="17" Text="Uninstall">
-          <Publish
-              Property="WixQuietExecCmdLine"
-              Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$codes = ('[SAME_VERSION_PRODUCT]' -split ';') | Where-Object { $_; }; $msi = Join-Path $env:SystemRoot 'System32\msiexec.exe'; foreach ($c in $codes) { $p = Start-Process -FilePath $msi -ArgumentList @('/x', $c, '/qb') -Wait -PassThru; if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode } }; exit 0&quot;"
-              Order="1" />
-          <Publish Event="DoAction" Value="UninstallSameVersion" Order="2" />
-          <Publish Event="EndDialog" Value="Exit" Order="3" />
-        </Control>
-        <Control Id="Reinstall" Type="PushButton" X="192" Y="195" Width="70" Height="17" Default="yes" Text="Reinstall">
-          <Publish Event="NewDialog" Value="VerifyReadyDlg" />
-        </Control>
-        <Control Id="Cancel" Type="PushButton" X="268" Y="195" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
-          <Publish Event="SpawnDialog" Value="CancelDlg" />
-        </Control>
-      </Dialog>
+			<ui:WixUI
+				Id="WixUI_InstallDir"
+				InstallDirectory="INSTALLFOLDER" />
 
-      <Dialog Id="ConfigDlg" Width="370" Height="270" Title="AssetBee Drone Setup">
-        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
-        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Inventory connection" />
-        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="30" Transparent="yes" NoPrefix="yes"
-                 Text="Enter the HTTPS inventory URL and exactly one auth secret." />
-        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+			<!-- Same version already installed. -->
+			<Dialog
+				Id="SameVersionDlg"
+				Width="370"
+				Height="220"
+				Title="AssetBee Drone Setup">
 
-        <Control Id="EndpointLabel" Type="Text" X="25" Y="70" Width="320" Height="12" Text="Endpoint (https://...)" />
-        <Control Id="EndpointEdit" Type="Edit" X="25" Y="84" Width="320" Height="18" Property="ENDPOINT" />
+				<Control
+					Id="BannerBitmap"
+					Type="Bitmap"
+					X="0"
+					Y="0"
+					Width="370"
+					Height="44"
+					TabSkip="no"
+					Text="WixUI_Bmp_Banner" />
 
-        <Control Id="BearerLabel" Type="Text" X="25" Y="114" Width="320" Height="12" Text="Bearer token (leave blank if using API key)" />
-        <Control Id="BearerEdit" Type="Edit" X="25" Y="128" Width="320" Height="18" Property="BEARERTOKEN" Password="yes" />
+				<Control
+					Id="Title"
+					Type="Text"
+					X="15"
+					Y="6"
+					Width="340"
+					Height="15"
+					Transparent="yes"
+					NoPrefix="yes"
+					Text="{\WixUI_Font_Title}AssetBee Drone $(var.Version) is already installed" />
 
-        <Control Id="ApiKeyLabel" Type="Text" X="25" Y="158" Width="320" Height="12" Text="API key (leave blank if using bearer token)" />
-        <Control Id="ApiKeyEdit" Type="Edit" X="25" Y="172" Width="320" Height="18" Property="APIKEY" Password="yes" />
+				<Control
+					Id="Description"
+					Type="Text"
+					X="25"
+					Y="23"
+					Width="320"
+					Height="30"
+					Transparent="yes"
+					NoPrefix="yes"
+					Text="Choose whether to reinstall this version or uninstall it from the computer." />
 
-        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
-        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
-          <Publish Event="NewDialog" Value="LicenseAgreementDlg" />
-        </Control>
-        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
-          <Publish Property="BEARERTOKEN" Value="[BT_EXISTING]" Order="1"
-                   Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT AK_EXISTING" />
-          <Publish Property="APIKEY" Value="[AK_EXISTING]" Order="2"
-                   Condition="NOT BEARERTOKEN AND NOT APIKEY AND AK_EXISTING" />
-          <Publish Property="BEARERTOKEN" Value="[BT_EXISTING]" Order="3"
-                   Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING" />
-          <Publish
-              Event="SpawnDialog"
-              Value="InvalidConfigDlg"
-              Order="4"
-              Condition="NOT ENDPOINT OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
-          <Publish
-              Property="WixQuietExecCmdLine"
-              Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -BearerToken &quot;[BEARERTOKEN]&quot; -ApiKey &quot;[APIKEY]&quot;"
-              Order="5"
-              Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
-          <Publish
-              Event="DoAction"
-              Value="SavePendingSettings"
-              Order="6"
-              Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
-          <Publish
-              Event="NewDialog"
-              Value="InstallDirDlg"
-              Order="7"
-              Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
-        </Control>
-        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
-          <Publish Event="SpawnDialog" Value="CancelDlg" />
-        </Control>
-      </Dialog>
+				<Control
+					Id="BannerLine"
+					Type="Line"
+					X="0"
+					Y="44"
+					Width="370"
+					Height="0" />
 
-      <Dialog Id="InvalidConfigDlg" Width="260" Height="85" Title="AssetBee Drone Setup">
-        <Control Id="Icon" Type="Icon" X="15" Y="15" Width="24" Height="24" Text="WixUI_Ico_Exclam" />
-        <Control Id="Text" Type="Text" X="48" Y="15" Width="194" Height="30"
-                 Text="Enter an HTTPS endpoint and exactly one of bearer token or API key." />
-        <Control Id="Ok" Type="PushButton" X="102" Y="57" Width="56" Height="17" Default="yes" Cancel="yes" Text="!(loc.WixUIOK)">
-          <Publish Event="EndDialog" Value="Return" />
-        </Control>
-      </Dialog>
+				<Control
+					Id="Info"
+					Type="Text"
+					X="25"
+					Y="60"
+					Width="320"
+					Height="80"
+					NoPrefix="yes"
+					Text="Reinstall replaces the program files and keeps your existing inventory endpoint and credentials. Uninstall removes AssetBee Drone from this computer." />
 
-      <!-- Welcome: same version → choice; upgrade → ready (keep config); else → license. -->
-      <Publish
-          Dialog="WelcomeDlg"
-          Control="Next"
-          Event="NewDialog"
-          Value="SameVersionDlg"
-          Order="3"
-          Condition="NOT Installed AND SAME_VERSION_PRODUCT AND NOT WIX_UPGRADE_DETECTED" />
-      <Publish
-          Dialog="WelcomeDlg"
-          Control="Next"
-          Event="NewDialog"
-          Value="VerifyReadyDlg"
-          Order="4"
-          Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
+				<Control
+					Id="BottomLine"
+					Type="Line"
+					X="0"
+					Y="184"
+					Width="370"
+					Height="0" />
 
-      <!-- Fresh install only: license → config. -->
-      <Publish
-          Dialog="LicenseAgreementDlg"
-          Control="Next"
-          Event="NewDialog"
-          Value="ConfigDlg"
-          Order="5"
-          Condition="LicenseAccepted = &quot;1&quot; AND NOT WIX_UPGRADE_DETECTED AND NOT SAME_VERSION_PRODUCT" />
-    </UI>
-  </Fragment>
+				<Control
+					Id="Uninstall"
+					Type="PushButton"
+					X="116"
+					Y="195"
+					Width="70"
+					Height="17"
+					Text="Uninstall">
+
+					<Publish
+						Property="WixQuietExecCmdLine"
+						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$codes = ('[SAME_VERSION_PRODUCT]' -split ';') | Where-Object { $_; }; $msi = Join-Path $env:SystemRoot 'System32\msiexec.exe'; foreach ($c in $codes) { $args = @('/x', $c, '/qb'); if ('[ENDPOINT]') { $args += 'ENDPOINT=&quot;[ENDPOINT]&quot;' }; $p = Start-Process -FilePath $msi -ArgumentList $args -Wait -PassThru; if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode } }; exit 0&quot;"
+						Order="1" />
+
+					<Publish
+						Event="DoAction"
+						Value="UninstallSameVersion"
+						Order="2" />
+
+					<Publish
+						Event="EndDialog"
+						Value="Exit"
+						Order="3" />
+
+				</Control>
+
+				<Control
+					Id="Reinstall"
+					Type="PushButton"
+					X="192"
+					Y="195"
+					Width="70"
+					Height="17"
+					Default="yes"
+					Text="Reinstall">
+
+					<Publish
+						Event="NewDialog"
+						Value="VerifyReadyDlg" />
+
+				</Control>
+
+				<Control
+					Id="Cancel"
+					Type="PushButton"
+					X="268"
+					Y="195"
+					Width="56"
+					Height="17"
+					Cancel="yes"
+					Text="!(loc.WixUICancel)">
+
+					<Publish
+						Event="SpawnDialog"
+						Value="CancelDlg" />
+
+				</Control>
+
+			</Dialog>
+
+			<!-- Fresh-install configuration -->
+			<Dialog
+				Id="ConfigDlg"
+				Width="370"
+				Height="270"
+				Title="AssetBee Drone Setup">
+
+				<Control
+					Id="BannerBitmap"
+					Type="Bitmap"
+					X="0"
+					Y="0"
+					Width="370"
+					Height="44"
+					TabSkip="no"
+					Text="WixUI_Bmp_Banner" />
+
+				<Control
+					Id="Title"
+					Type="Text"
+					X="15"
+					Y="6"
+					Width="340"
+					Height="15"
+					Transparent="yes"
+					NoPrefix="yes"
+					Text="{\WixUI_Font_Title}Inventory connection" />
+
+				<Control
+					Id="Description"
+					Type="Text"
+					X="25"
+					Y="23"
+					Width="320"
+					Height="30"
+					Transparent="yes"
+					NoPrefix="yes"
+					Text="Enter the HTTPS inventory URL and exactly one auth secret." />
+
+				<Control
+					Id="BannerLine"
+					Type="Line"
+					X="0"
+					Y="44"
+					Width="370"
+					Height="0" />
+
+				<Control
+					Id="EndpointLabel"
+					Type="Text"
+					X="25"
+					Y="70"
+					Width="320"
+					Height="12"
+					Text="Endpoint (https://...)" />
+
+				<Control
+					Id="EndpointEdit"
+					Type="Edit"
+					X="25"
+					Y="84"
+					Width="320"
+					Height="18"
+					Property="ENDPOINT" />
+
+				<Control
+					Id="BearerLabel"
+					Type="Text"
+					X="25"
+					Y="114"
+					Width="320"
+					Height="12"
+					Text="Bearer token (leave blank if using API key)" />
+
+				<Control
+					Id="BearerEdit"
+					Type="Edit"
+					X="25"
+					Y="128"
+					Width="320"
+					Height="18"
+					Property="BEARERTOKEN"
+					Password="yes" />
+
+				<Control
+					Id="ApiKeyLabel"
+					Type="Text"
+					X="25"
+					Y="158"
+					Width="320"
+					Height="12"
+					Text="API key (leave blank if using bearer token)" />
+
+				<Control
+					Id="ApiKeyEdit"
+					Type="Edit"
+					X="25"
+					Y="172"
+					Width="320"
+					Height="18"
+					Property="APIKEY"
+					Password="yes" />
+
+				<Control
+					Id="BottomLine"
+					Type="Line"
+					X="0"
+					Y="234"
+					Width="370"
+					Height="0" />
+
+				<Control
+					Id="Back"
+					Type="PushButton"
+					X="180"
+					Y="243"
+					Width="56"
+					Height="17"
+					Text="!(loc.WixUIBack)">
+
+					<Publish
+						Event="NewDialog"
+						Value="LicenseAgreementDlg" />
+
+				</Control>
+
+				<Control
+					Id="Next"
+					Type="PushButton"
+					X="236"
+					Y="243"
+					Width="56"
+					Height="17"
+					Default="yes"
+					Text="!(loc.WixUINext)">
+
+					<Publish
+						Property="BEARERTOKEN"
+						Value="[BT_EXISTING]"
+						Order="1"
+						Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT AK_EXISTING" />
+
+					<Publish
+						Property="APIKEY"
+						Value="[AK_EXISTING]"
+						Order="2"
+						Condition="NOT BEARERTOKEN AND NOT APIKEY AND AK_EXISTING" />
+
+					<Publish
+						Property="BEARERTOKEN"
+						Value="[BT_EXISTING]"
+						Order="3"
+						Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING" />
+
+					<Publish
+						Event="SpawnDialog"
+						Value="InvalidConfigDlg"
+						Order="4"
+						Condition="NOT ENDPOINT OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+					<Publish
+						Property="WixQuietExecCmdLine"
+						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -BearerToken &quot;[BEARERTOKEN]&quot; -ApiKey &quot;[APIKEY]&quot;"
+						Order="5"
+						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+					<Publish
+						Event="DoAction"
+						Value="SavePendingSettings"
+						Order="6"
+						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+					<Publish
+						Event="NewDialog"
+						Value="InstallDirDlg"
+						Order="7"
+						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+				</Control>
+
+				<Control
+					Id="Cancel"
+					Type="PushButton"
+					X="304"
+					Y="243"
+					Width="56"
+					Height="17"
+					Cancel="yes"
+					Text="!(loc.WixUICancel)">
+
+					<Publish
+						Event="SpawnDialog"
+						Value="CancelDlg" />
+
+				</Control>
+
+			</Dialog>
+
+			<Dialog
+				Id="InvalidConfigDlg"
+				Width="260"
+				Height="85"
+				Title="AssetBee Drone Setup">
+
+				<Control
+					Id="Icon"
+					Type="Icon"
+					X="15"
+					Y="15"
+					Width="24"
+					Height="24"
+					Text="WixUI_Ico_Exclam" />
+
+				<Control
+					Id="Text"
+					Type="Text"
+					X="48"
+					Y="15"
+					Width="194"
+					Height="30"
+					Text="Enter an HTTPS endpoint and exactly one of bearer token or API key." />
+
+				<Control
+					Id="Ok"
+					Type="PushButton"
+					X="102"
+					Y="57"
+					Width="56"
+					Height="17"
+					Default="yes"
+					Cancel="yes"
+					Text="!(loc.WixUIOK)">
+
+					<Publish
+						Event="EndDialog"
+						Value="Return" />
+
+				</Control>
+
+			</Dialog>
+
+			<!-- Same version -->
+			<Publish
+				Dialog="WelcomeDlg"
+				Control="Next"
+				Event="NewDialog"
+				Value="SameVersionDlg"
+				Order="3"
+				Condition="NOT Installed AND SAME_VERSION_PRODUCT AND NOT WIX_UPGRADE_DETECTED" />
+
+			<!-- Upgrade -->
+			<Publish
+				Dialog="WelcomeDlg"
+				Control="Next"
+				Event="NewDialog"
+				Value="VerifyReadyDlg"
+				Order="4"
+				Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
+
+			<!-- Fresh install -->
+			<Publish
+				Dialog="LicenseAgreementDlg"
+				Control="Next"
+				Event="NewDialog"
+				Value="ConfigDlg"
+				Order="5"
+				Condition="LicenseAccepted = &quot;1&quot; AND NOT WIX_UPGRADE_DETECTED AND NOT SAME_VERSION_PRODUCT" />
+
+		</UI>
+
+	</Fragment>
+
 </Wix>
