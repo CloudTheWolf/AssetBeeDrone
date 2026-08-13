@@ -1,0 +1,71 @@
+{
+  "blockdevices": [
+    {
+      "name": "loop0",
+      "kname": "loop0",
+      "type": "loop",
+      "fstype": "squashfs",
+      "size": 104857600,
+      "fsavail": 0,
+      "mountpoint": "/snap/core/1"
+    },
+    {
+      "name": "nvme0n1",
+      "kname": "nvme0n1",
+      "type": "disk",
+      "fstype": null,
+      "size": 512110190592,
+      "fsavail": null,
+      "mountpoint": null,
+      "children": [
+        {
+          "name": "nvme0n1p1",
+          "kname": "nvme0n1p1",
+          "type": "part",
+          "fstype": "vfat",
+          "size": 536870912,
+          "fsavail": 268435456,
+          "mountpoint": "/boot/efi"
+        },
+        {
+          "name": "nvme0n1p2",
+          "kname": "nvme0n1p2",
+          "type": "part",
+          "fstype": "ext4",
+          "size": 107374182400,
+          "fsavail": 53687091200,
+          "mountpoint": "/"
+        },
+        {
+          "name": "nvme0n1p3",
+          "kname": "nvme0n1p3",
+          "type": "part",
+          "fstype": "crypto_LUKS",
+          "size": 404199145472,
+          "fsavail": null,
+          "mountpoint": null,
+          "children": [
+            {
+              "name": "secure",
+              "kname": "dm-0",
+              "type": "crypt",
+              "fstype": "ext4",
+              "size": 404197048320,
+              "fsavail": 200000000000,
+              "mountpoint": "/secure"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tmpfs",
+      "kname": "tmpfs",
+      "type": "disk",
+      "fstype": "tmpfs",
+      "size": 16777216,
+      "fsavail": 16777216,
+      "mountpoint": "/run"
+    }
+  ]
+}

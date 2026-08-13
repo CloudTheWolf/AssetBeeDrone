@@ -8,7 +8,9 @@ and macOS devices and posts a versioned JSON document to an HTTPS endpoint.
 - Device name, firmware serial number, manufacturer, and model (system SKU)
 - Operating system name, version, display version, build, and kernel
 - Installed and available OS/security updates
-- CPU model/core counts, total memory, and mounted disk capacity/free space
+- CPU model/core counts, total memory, and block devices (Linux reports
+  partition names such as `nvme0n1p1`, excluding loop devices and virtual
+  filesystems like tmpfs/overlay/squashfs)
 - BitLocker, LUKS/dm-crypt, or FileVault state
 - Windows BitLocker numerical recovery passwords and their key protector IDs
 - AD/Entra/workplace, realmd/SSSD, Apple AD, and MDM workspace state
@@ -145,12 +147,18 @@ time.
 
 **MSI**
 
+Interactive (no properties required): double-click the MSI or run `msiexec /i AssetBee.Drone-1.0.0-win-x64.msi`. The wizard prompts for endpoint and bearer token or API key on first install.
+
+Silent first install:
+
 ```powershell
 msiexec /i AssetBee.Drone-1.0.0-win-x64.msi /qn `
   ENDPOINT=https://inventory.example.com/api/v1/inventory `
   BEARERTOKEN=secret
 # or APIKEY=secret
 ```
+
+Upgrade / reinstall: run the new MSI without `ENDPOINT` / auth properties to keep the existing `appsettings.json`. Pass those properties only when you want to change the connection settings.
 
 **Portable archive / publish folder**
 

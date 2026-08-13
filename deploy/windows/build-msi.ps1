@@ -38,12 +38,15 @@ if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
 
 & wix --version | Out-Host
 & wix extension add -g WixToolset.Util.wixext/5.0.2 2>$null
+& wix extension add -g WixToolset.UI.wixext/5.0.2 2>$null
 
 $outputMsi = Join-Path $OutputDirectory "AssetBee.Drone-$Version-win-x64.msi"
 
 & wix build `
     (Join-Path $scriptDir 'AssetBeeDrone.wxs') `
+    (Join-Path $scriptDir 'AssetBeeDroneUI.wxs') `
     -ext WixToolset.Util.wixext `
+    -ext WixToolset.UI.wixext `
     -d "Version=$Version" `
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `

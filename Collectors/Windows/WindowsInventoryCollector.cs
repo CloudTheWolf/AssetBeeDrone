@@ -285,11 +285,26 @@ public sealed partial class WindowsInventoryCollector(
 
     private static ProbeValue<IReadOnlyList<LoginProviderInfo>> ParseLoginProviders(JsonElement root)
     {
-        List<LoginProviderInfo> providers =
-            [new("Windows Credential Provider", "available", "Built-in Windows sign-in")];
-        if (GetBoolean(root, "GcpwInstalled") == true)
+        if (!root.TryGetProperty("LoginProviders", out JsonElement values))
         {
-            providers.Add(new LoginProviderInfo("Google Credential Provider for Windows", "installed"));
+            return ProbeValue<IReadOnlyList<LoginProviderInfo>>.Unavailable(
+                "Windows credential providers were not returned.");
+        }
+
+        List<LoginProviderInfo> providers = [];
+        foreach (JsonElement provider in AsArray(values))
+        {
+            string? name = GetString(provider, "Name");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            bool disabled = GetBoolean(provider, "Disabled") == true;
+            providers.Add(new LoginProviderInfo(
+                name,
+                disabled ? "disabled" : "enabled",
+                GetString(provider, "CLSID")));
         }
 
         return ProbeValue<IReadOnlyList<LoginProviderInfo>>.Available(providers);
@@ -398,8 +413,41 @@ public sealed partial class WindowsInventoryCollector(
                     }
                 })
         } catch {}
-        $gcpw = (Test-Path 'HKLM:\SOFTWARE\Google\GCPW') -or
-            (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{F8A1793B-7873-4046-B2A7-1F318747F427}')
+        $loginProviders = @()
+        try {
+            $providerPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers'
+            $friendlyNames = @{
+                '{60B78E88-EAD8-445C-9CFD-0B87F74EA6CD}' = 'Windows Password'
+                '{D6886603-9D2F-4EB2-B667-1971041FA96B}' = 'Windows PIN'
+                '{8AF662BF-65A0-4D0A-A540-A338A999D36F}' = 'Windows Picture Password'
+                '{BEC09223-B018-416D-A0AC-523971B639F5}' = 'Windows Smart Card'
+            }
+            $loginProviders = @(Get-ChildItem $providerPath | ForEach-Object {
+                $clsid = $_.PSChildName
+                $registryName = (Get-ItemProperty `
+                    "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid" `
+                    -ErrorAction SilentlyContinue).'(default)'
+                $provider = Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue
+                $name = if ($friendlyNames.ContainsKey($clsid)) {
+                    $friendlyNames[$clsid]
+                }
+                elseif ($registryName) {
+                    $registryName `
+                        -replace '^Microsoft ', '' `
+                        -replace 'Credential Provider$', '' `
+                        -replace 'CredentialProvider$', '' `
+                        -replace '\s+$', ''
+                }
+                else {
+                    'Unknown Credential Provider'
+                }
+                [pscustomobject]@{
+                    Name = $name
+                    CLSID = $clsid
+                    Disabled = ($provider.Disabled -eq 1)
+                }
+            })
+        } catch {}
         $join = ''
         try { $join = (& "$env:SystemRoot\System32\dsregcmd.exe" /status | Out-String) } catch {}
         $os = Get-CimInstance Win32_OperatingSystem
@@ -408,39 +456,61 @@ public sealed partial class WindowsInventoryCollector(
             $displayVersion = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name DisplayVersion -ErrorAction Stop).DisplayVersion
         } catch {}
         $installedUpdates = @()
-        try {
-            $installedUpdates = @(Get-HotFix | Sort-Object -Property InstalledOn -Descending |
-                Select-Object -First 50 | ForEach-Object {
-                    $installedOn = $null
-                    if ($_.InstalledOn) {
-                        $installedOn = ([datetime]$_.InstalledOn).ToUniversalTime().ToString('o')
-                    }
-                    [pscustomobject]@{
-                        Id = $_.HotFixID
-                        Title = $_.Description
-                        Category = $_.Description
-                        InstalledAtUtc = $installedOn
-                        KbArticle = $_.HotFixID
-                    }
-                })
-        } catch {}
         $availableUpdates = @()
         try {
             $session = New-Object -ComObject Microsoft.Update.Session
             $searcher = $session.CreateUpdateSearcher()
-            $result = $searcher.Search("IsInstalled=0 and Type='Software' and IsHidden=0")
-            $availableUpdates = @(0..($result.Updates.Count - 1) | ForEach-Object {
-                $update = $result.Updates.Item($_)
-                $kb = @($update.KBArticleIDs | ForEach-Object { "KB$_" }) -join ','
-                if ([string]::IsNullOrWhiteSpace($kb)) { $kb = $null }
-                [pscustomobject]@{
-                    Id = $update.Identity.UpdateID
-                    Title = $update.Title
-                    Category = (@($update.Categories | ForEach-Object { $_.Name }) -join ', ')
-                    InstalledAtUtc = $null
-                    KbArticle = $kb
+            try {
+                $historyCount = $searcher.GetTotalHistoryCount()
+                if ($historyCount -gt 0) {
+                    $installedUpdates = @($searcher.QueryHistory(0, $historyCount) |
+                        Where-Object { $_.ResultCode -eq 2 -and $_.Title -match '(KB\d+)' } |
+                        ForEach-Object {
+                            if ($_.Title -match '(KB\d+)') {
+                                [pscustomobject]@{
+                                    KB = $matches[1]
+                                    Title = $_.Title
+                                    InstalledOn = $_.Date
+                                }
+                            }
+                        } |
+                        Group-Object KB |
+                        ForEach-Object {
+                            $_.Group |
+                                Sort-Object InstalledOn -Descending |
+                                Select-Object -First 1
+                        } |
+                        Sort-Object InstalledOn -Descending |
+                        ForEach-Object {
+                            $installedOn = $null
+                            if ($_.InstalledOn) {
+                                $installedOn = ([datetime]$_.InstalledOn).ToUniversalTime().ToString('o')
+                            }
+                            [pscustomobject]@{
+                                Id = $_.KB
+                                Title = $_.Title
+                                Category = 'Windows Update'
+                                InstalledAtUtc = $installedOn
+                                KbArticle = $_.KB
+                            }
+                        })
                 }
-            })
+            } catch {}
+            try {
+                $result = $searcher.Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+                $availableUpdates = @(0..($result.Updates.Count - 1) | ForEach-Object {
+                    $update = $result.Updates.Item($_)
+                    $kb = @($update.KBArticleIDs | ForEach-Object { "KB$_" }) -join ','
+                    if ([string]::IsNullOrWhiteSpace($kb)) { $kb = $null }
+                    [pscustomobject]@{
+                        Id = $update.Identity.UpdateID
+                        Title = $update.Title
+                        Category = (@($update.Categories | ForEach-Object { $_.Name }) -join ', ')
+                        InstalledAtUtc = $null
+                        KbArticle = $kb
+                    }
+                })
+            } catch {}
         } catch {}
         [pscustomobject]@{
             DeviceName = $env:COMPUTERNAME
@@ -464,7 +534,7 @@ public sealed partial class WindowsInventoryCollector(
             Disks = $disks
             Encryption = $encryption
             BitLockerAvailable = $bitLockerAvailable
-            GcpwInstalled = $gcpw
+            LoginProviders = $loginProviders
             Antivirus = $antivirus
             Updates = [pscustomobject]@{
                 Installed = $installedUpdates

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Fragment>
+    <UI Id="AssetBeeDroneUI">
+      <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+      <Dialog Id="ConfigDlg" Width="370" Height="270" Title="AssetBee Drone Setup">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Inventory connection" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="20" Transparent="yes" NoPrefix="yes"
+                 Text="Enter the HTTPS inventory URL and exactly one authentication secret." />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+
+        <Control Id="EndpointLabel" Type="Text" X="25" Y="60" Width="320" Height="12" Text="Endpoint (https://...)" />
+        <Control Id="EndpointEdit" Type="Edit" X="25" Y="74" Width="320" Height="18" Property="ENDPOINT" />
+
+        <Control Id="BearerLabel" Type="Text" X="25" Y="104" Width="320" Height="12" Text="Bearer token (leave blank if using API key)" />
+        <Control Id="BearerEdit" Type="Edit" X="25" Y="118" Width="320" Height="18" Property="BEARERTOKEN" Password="yes" />
+
+        <Control Id="ApiKeyLabel" Type="Text" X="25" Y="148" Width="320" Height="12" Text="API key (leave blank if using bearer token)" />
+        <Control Id="ApiKeyEdit" Type="Edit" X="25" Y="162" Width="320" Height="18" Property="APIKEY" Password="yes" />
+
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
+          <Publish Event="NewDialog" Value="InstallDirDlg" />
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
+          <Publish
+              Event="SpawnDialog"
+              Value="InvalidConfigDlg"
+              Order="1"
+              Condition="ENDPOINT = &quot;&quot; OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;))" />
+          <Publish
+              Event="NewDialog"
+              Value="VerifyReadyDlg"
+              Order="2"
+              Condition="ENDPOINT &lt;&gt; &quot;&quot; AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;))" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <Dialog Id="InvalidConfigDlg" Width="260" Height="85" Title="AssetBee Drone Setup">
+        <Control Id="Icon" Type="Icon" X="15" Y="15" Width="24" Height="24" Text="WixUI_Ico_Exclam" />
+        <Control Id="Text" Type="Text" X="48" Y="15" Width="194" Height="30"
+                 Text="Enter an HTTPS endpoint and exactly one of bearer token or API key." />
+        <Control Id="Ok" Type="PushButton" X="102" Y="57" Width="56" Height="17" Default="yes" Cancel="yes" Text="!(loc.WixUIOK)">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+      </Dialog>
+
+      <!-- Fresh interactive install without msiexec properties: collect config after the directory page. -->
+      <Publish
+          Dialog="InstallDirDlg"
+          Control="Next"
+          Event="NewDialog"
+          Value="ConfigDlg"
+          Order="3"
+          Condition="NOT WIX_UPGRADE_DETECTED AND ENDPOINT = &quot;&quot;" />
+      <Publish
+          Dialog="InstallDirDlg"
+          Control="Next"
+          Event="NewDialog"
+          Value="VerifyReadyDlg"
+          Order="4"
+          Condition="WIX_UPGRADE_DETECTED OR ENDPOINT &lt;&gt; &quot;&quot;" />
+    </UI>
+  </Fragment>
+</Wix>

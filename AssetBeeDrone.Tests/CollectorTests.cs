@@ -76,7 +76,11 @@ public sealed class CollectorTests
         Assert.Equal(8, inventory.Cpu.Value?.LogicalProcessors);
         Assert.Equal("Example Workspace", inventory.DomainWorkspace.Value?.Workspace);
         Assert.Contains(inventory.LoginProviders.Value!,
-            provider => provider.Name.Contains("Google Credential Provider"));
+            provider => provider.Name == "Windows Password" && provider.State == "enabled");
+        Assert.Contains(inventory.LoginProviders.Value!,
+            provider => provider.Name.Contains("Google Credential Provider") &&
+                        provider.Detail == "{F8A1793B-7873-4046-B2A7-1F318747F427}");
+        Assert.Equal(3, inventory.LoginProviders.Value!.Count);
         Assert.Equal(
             "111111-222222-333333-444444-555555-666666-777777-888888",
             inventory.DiskEncryption.Value![0].RecoveryKeys![0]);
@@ -98,8 +102,11 @@ public sealed class CollectorTests
     public async Task Linux_collector_reports_luks_realm_security_service_and_sbom()
     {
         string lsblk = await ReadFixtureAsync("linux-lsblk.txt");
+        string lsblkJson = await ReadFixtureAsync("linux-lsblk.json");
         FakeProcessRunner runner = new((file, arguments) => (file, string.Join(' ', arguments)) switch
         {
+            ("lsblk", string value) when value.Contains("-J", StringComparison.Ordinal) =>
+                new ProcessResult(0, lsblkJson, string.Empty),
             ("lsblk", _) => new ProcessResult(0, lsblk, string.Empty),
             ("uname", _) => new ProcessResult(0, "6.8.0-test\n", string.Empty),
             ("apt", _) => new ProcessResult(0,
@@ -130,6 +137,15 @@ public sealed class CollectorTests
         Assert.Equal("LINUXSERIAL", inventory.SerialNumber.Value);
         Assert.Equal("dellInc", inventory.Manufacturer.Value);
         Assert.Equal("latitude5520", inventory.Model.Value);
+        Assert.Equal(ProbeStatus.Available, inventory.Disks.Status);
+        Assert.Contains(inventory.Disks.Value!, disk => disk.Name == "nvme0n1p1" && disk.MountPoint == "/boot/efi");
+        Assert.Contains(inventory.Disks.Value!, disk => disk.Name == "nvme0n1p2" && disk.MountPoint == "/");
+        Assert.Contains(inventory.Disks.Value!, disk => disk.Name == "nvme0n1p3" && disk.FileSystem == "crypto_LUKS");
+        Assert.Contains(inventory.Disks.Value!, disk => disk.Name == "dm-0" && disk.MountPoint == "/secure");
+        Assert.DoesNotContain(inventory.Disks.Value!, disk => disk.Name.StartsWith("loop", StringComparison.Ordinal));
+        Assert.DoesNotContain(inventory.Disks.Value!, disk => disk.FileSystem == "tmpfs");
+        Assert.DoesNotContain(inventory.Disks.Value!, disk => disk.FileSystem == "squashfs");
+        Assert.DoesNotContain(inventory.Disks.Value!, disk => disk.Name == "nvme0n1");
         Assert.Contains(inventory.DiskEncryption.Value!,
             volume => volume.Technology == "LUKS/dm-crypt");
         Assert.Equal("example.test", inventory.DomainWorkspace.Value?.Domain);

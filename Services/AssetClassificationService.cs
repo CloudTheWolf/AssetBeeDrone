@@ -45,9 +45,17 @@ public sealed class AssetClassificationService(
     {
         const string script = """
             $computer = Get-CimInstance Win32_ComputerSystem
+            $chassisTypes = @()
+            try {
+                $enclosure = Get-CimInstance Win32_SystemEnclosure | Select-Object -First 1
+                if ($null -ne $enclosure -and $null -ne $enclosure.ChassisTypes) {
+                    $chassisTypes = @($enclosure.ChassisTypes | ForEach-Object { [int]$_ })
+                }
+            } catch {}
             [pscustomobject]@{
                 Manufacturer = [string]$computer.Manufacturer
                 Model = [string]$computer.Model
+                ChassisTypes = $chassisTypes
                 PcSystemType = [int]$computer.PCSystemType
             } | ConvertTo-Json -Compress
             """;
@@ -72,18 +80,35 @@ public sealed class AssetClassificationService(
                 return Virtualware($"Virtual machine platform detected: {identity}.");
             }
 
+            // Prefer SMBIOS ChassisTypes (same enum as Linux DMI chassis_type).
+            // Matches: switch on each ChassisTypes value, break on laptop/server.
+            List<int> chassisTypes = ReadChassisTypes(root).ToList();
+            if (chassisTypes.Count > 0)
+            {
+                string hardwareType = "desktop";
+                foreach (int chassisType in chassisTypes)
+                {
+                    string mapped = MapSmbiosChassisType(chassisType);
+                    if (mapped is "laptop" or "server")
+                    {
+                        hardwareType = mapped;
+                        break;
+                    }
+                }
+
+                return Hardware(hardwareType, string.Empty);
+            }
+
+            // PCSystemType: 1 Desktop, 2 Mobile, 3 Workstation, 4 Enterprise Server,
+            // 5 SOHO Server, 6 Appliance PC, 7 Performance Server.
             int systemType = root.TryGetProperty("PcSystemType", out JsonElement value) &&
                              value.TryGetInt32(out int parsed)
                 ? parsed
                 : 0;
-            string? hardwareType = systemType switch
-            {
-                2 or 4 => "desktop",
-                3 => "laptop",
-                5 or 6 or 7 or 8 => "server",
-                _ => null
-            };
-            return Hardware(hardwareType, "Windows PCSystemType did not identify the form factor.");
+            string? fromPcSystemType = MapWindowsPcSystemType(systemType);
+            return Hardware(
+                fromPcSystemType,
+                "Windows chassis type and PCSystemType did not identify the form factor.");
         }
         catch (JsonException)
         {
@@ -125,14 +150,7 @@ public sealed class AssetClassificationService(
             return Hardware(null, "Linux DMI chassis type was unavailable.");
         }
 
-        string? hardwareType = chassisType switch
-        {
-            >= 8 and <= 14 or >= 30 and <= 32 => "laptop",
-            >= 3 and <= 7 or 15 or 16 => "desktop",
-            17 or 23 => "server",
-            _ => null
-        };
-        return Hardware(hardwareType, $"Unrecognized DMI chassis type: {chassisType}.");
+        return Hardware(MapSmbiosChassisType(chassisType), string.Empty);
     }
 
     private async Task<AssetClassification> ClassifyMacOsAsync(
@@ -204,4 +222,47 @@ public sealed class AssetClassificationService(
 
     private static string? GetString(JsonElement element, string property) =>
         element.TryGetProperty(property, out JsonElement value) ? value.ToString() : null;
+
+    private static IEnumerable<int> ReadChassisTypes(JsonElement root)
+    {
+        if (!root.TryGetProperty("ChassisTypes", out JsonElement values))
+        {
+            yield break;
+        }
+
+        if (values.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement value in values.EnumerateArray())
+            {
+                if (value.TryGetInt32(out int chassisType))
+                {
+                    yield return chassisType;
+                }
+            }
+
+            yield break;
+        }
+
+        if (values.TryGetInt32(out int single))
+        {
+            yield return single;
+        }
+    }
+
+    // SMBIOS chassis type codes (Linux DMI / Win32_SystemEnclosure.ChassisTypes).
+    public static string MapSmbiosChassisType(int chassisType) => chassisType switch
+    {
+        8 or 9 or 10 or 11 or 12 or 14 or 18 or 21 or 30 or 31 or 32 => "laptop",
+        17 or 23 or 28 or 29 => "server",
+        _ => "desktop"
+    };
+
+    // Win32_ComputerSystem.PCSystemType fallback when SMBIOS chassis is missing.
+    public static string? MapWindowsPcSystemType(int systemType) => systemType switch
+    {
+        1 or 3 or 6 => "desktop",
+        2 => "laptop",
+        4 or 5 or 7 => "server",
+        _ => null
+    };
 }

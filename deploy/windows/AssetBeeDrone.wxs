@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package
       Name="AssetBee Drone"
@@ -15,12 +16,16 @@
     <Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
     <Property Id="APIKEY" Secure="yes" Hidden="yes" />
 
-    <Launch
-        Condition="ENDPOINT &lt;&gt; &quot;&quot;"
-        Message="Set the ENDPOINT property to an HTTPS inventory URL (msiexec ... ENDPOINT=https://...)." />
-    <Launch
-        Condition="(BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;)"
-        Message="Provide exactly one of BEARERTOKEN or APIKEY." />
+    <!-- Fresh silent installs must still supply config; upgrades may keep existing appsettings.json. -->
+    <CustomAction
+        Id="RequireEndpoint"
+        Error="Provide ENDPOINT via msiexec or the installer UI on first install." />
+    <CustomAction
+        Id="RequireAuth"
+        Error="Provide exactly one of BEARERTOKEN or APIKEY when ENDPOINT is set." />
+    <CustomAction
+        Id="RequireHttps"
+        Error="ENDPOINT must be an HTTPS URL (https://...)." />
 
     <Feature Id="Main" Title="AssetBee Drone" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
@@ -74,6 +79,8 @@
       </Component>
     </ComponentGroup>
 
+    <UIRef Id="AssetBeeDroneUI" />
+
     <!-- Deferred QuietExec: command line is CustomActionData (property Id == CA Id). -->
     <SetProperty
         Id="WriteAppSettings"
@@ -90,7 +97,23 @@
         Return="check" />
 
     <InstallExecuteSequence>
-      <Custom Action="WriteAppSettings" Before="StartServices" Condition="NOT Installed" />
+      <Custom
+          Action="RequireEndpoint"
+          Before="InstallInitialize"
+          Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED AND ENDPOINT = &quot;&quot; AND NOT REMOVE" />
+      <Custom
+          Action="RequireHttps"
+          Before="InstallInitialize"
+          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) AND NOT REMOVE" />
+      <Custom
+          Action="RequireAuth"
+          Before="InstallInitialize"
+          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;)) AND NOT REMOVE" />
+      <!-- Write settings only when the user supplied new values; upgrades keep existing appsettings.json. -->
+      <Custom
+          Action="WriteAppSettings"
+          Before="StartServices"
+          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT REMOVE" />
     </InstallExecuteSequence>
   </Package>
 </Wix>
