@@ -157,7 +157,6 @@
         Id="WixQuietExec64CmdLine"
         Action="SetLoadExistingSettingsUI"
         Sequence="ui"
-        After="ExtractMsiScripts"
         Before="LoadExistingSettings"
         Condition="NOT REMOVE"
         Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-LoadExisting.ps1&quot;" />
@@ -174,7 +173,6 @@
         Id="WixQuietExec64CmdLine"
         Action="SetLoadExistingSettingsExec"
         Sequence="execute"
-        After="ExtractMsiScripts"
         Before="LoadExistingSettings"
         Condition="NOT REMOVE"
         Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-LoadExisting.ps1&quot;" />
@@ -183,7 +181,6 @@
         Id="WixQuietExec64CmdLine"
         Action="SetPreserveExistingSettings"
         Sequence="execute"
-        After="InstallInitialize"
         Before="PreserveExistingSettings"
         Condition="(WIX_UPGRADE_DETECTED OR SAME_VERSION_PRODUCT) AND NOT REMOVE"
         Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-PreserveSettings.ps1&quot;" />
@@ -213,7 +210,7 @@
 
     <InstallUISequence>
       <Custom Action="ExtractMsiScripts" Before="AppSearch" Condition="NOT REMOVE" />
-      <Custom Action="LoadExistingSettings" After="SetLoadExistingSettingsUI" Condition="NOT REMOVE" />
+      <Custom Action="LoadExistingSettings" After="ExtractMsiScripts" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
       <Custom Action="SetBearerExistingFromHklm" After="AppSearch" Condition="NOT BT_EXISTING AND BT_HKLM" />
@@ -224,7 +221,7 @@
 
     <InstallExecuteSequence>
       <Custom Action="ExtractMsiScripts" Before="AppSearch" Condition="NOT REMOVE" />
-      <Custom Action="LoadExistingSettings" After="SetLoadExistingSettingsExec" Condition="NOT REMOVE" />
+      <Custom Action="LoadExistingSettings" After="ExtractMsiScripts" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
       <Custom Action="SetBearerExistingFromHklm" After="AppSearch" Condition="NOT BT_EXISTING AND BT_HKLM" />
@@ -236,7 +233,7 @@
       <Custom Action="RestoreBearerPrefer" After="RestoreApiKeyOnly" Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT REMOVE" />
       <Custom
           Action="PreserveExistingSettings"
-          After="SetPreserveExistingSettings"
+          After="InstallInitialize"
           Condition="(WIX_UPGRADE_DETECTED OR SAME_VERSION_PRODUCT) AND NOT REMOVE" />
       <RemoveExistingProducts After="PreserveExistingSettings" />
       <Custom Action="WriteAppSettings" Before="StartServices" Condition="NOT REMOVE" />
