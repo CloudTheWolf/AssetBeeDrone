@@ -62,6 +62,12 @@ if (-not (Test-Path -LiteralPath $savePendingPath)) {
 }
 $savePendingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($savePendingPath))
 
+$preservePath = Join-Path $scriptDir 'PreserveExistingSettings.ps1'
+if (-not (Test-Path -LiteralPath $preservePath)) {
+    throw "Missing $preservePath"
+}
+$preserveSettingsB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($preservePath))
+
 & wix build `
     (Join-Path $scriptDir 'AssetBeeDrone.wxs') `
     (Join-Path $scriptDir 'AssetBeeDroneUI.wxs') `
@@ -71,6 +77,7 @@ $savePendingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($savePending
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `
     -d "SavePendingB64=$savePendingB64" `
+    -d "PreserveSettingsB64=$preserveSettingsB64" `
     -arch x64 `
     -o $outputMsi
 

@@ -200,6 +200,21 @@
         Impersonate="yes"
         Return="ignore" />
 
+    <!-- Before RemoveExistingProducts deletes appsettings.json, copy it to ProgramData for WriteAppSettings. -->
+    <SetProperty
+        Id="PreserveExistingSettings"
+        Sequence="execute"
+        Before="PreserveExistingSettings"
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;[IO.File]::WriteAllBytes(([IO.Path]::Combine('[TempFolder]','AssetBee-PreserveSettings.ps1')), [Convert]::FromBase64String('$(var.PreserveSettingsB64)')); &amp; ([IO.Path]::Combine('[TempFolder]','AssetBee-PreserveSettings.ps1'))&quot;" />
+
+    <CustomAction
+        Id="PreserveExistingSettings"
+        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+        DllEntry="WixQuietExec"
+        Execute="immediate"
+        Impersonate="no"
+        Return="ignore" />
+
     <CustomAction
         Id="SavePendingSettings"
         BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
@@ -251,7 +266,12 @@
     </InstallUISequence>
 
     <InstallExecuteSequence>
-      <RemoveExistingProducts After="InstallInitialize" />
+      <!-- Snapshot config before the old product uninstall deletes appsettings.json. -->
+      <Custom
+          Action="PreserveExistingSettings"
+          After="InstallInitialize"
+          Condition="(WIX_UPGRADE_DETECTED OR SAME_VERSION_PRODUCT) AND NOT REMOVE" />
+      <RemoveExistingProducts After="PreserveExistingSettings" />
       <Custom Action="LoadExistingSettings" Before="AppSearch" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
@@ -262,7 +282,7 @@
       <Custom Action="RestoreBearerOnly" After="SetApiKeyExistingFromHkcu" Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT AK_EXISTING AND NOT REMOVE" />
       <Custom Action="RestoreApiKeyOnly" After="RestoreBearerOnly" Condition="NOT BEARERTOKEN AND NOT APIKEY AND AK_EXISTING AND NOT REMOVE" />
       <Custom Action="RestoreBearerPrefer" After="RestoreApiKeyOnly" Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT REMOVE" />
-      <!-- Fresh install writes UI pending; upgrade/reinstall keeps existing appsettings when no pending. -->
+      <!-- Fresh: UI pending. Upgrade/reinstall: pending from PreserveExistingSettings. -->
       <Custom
           Action="WriteAppSettings"
           Before="StartServices"
