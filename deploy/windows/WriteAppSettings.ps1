@@ -106,7 +106,7 @@ if ([string]::IsNullOrWhiteSpace($Endpoint) -or (
 }
 
 if ([string]::IsNullOrWhiteSpace($Endpoint)) {
-    throw 'ENDPOINT is missing. Enter it in the installer UI or pass ENDPOINT= to msiexec.'
+    throw 'The inventory endpoint is missing from both the installer UI and existing settings.'
 }
 
 try {

@@ -175,7 +175,11 @@ msiexec /i AssetBee.Drone-<version>-win-x64.msi /qn `
 # or APIKEY=secret
 ```
 
-Silent upgrade: run the newer MSI without `ENDPOINT` / auth properties; existing settings are kept. Pass those properties only when you want to change the connection settings. The legacy 1.0.0 MSI had an uninstall launch-condition bug, so upgrade that release through the full installer UI; the compatibility flow removes it before installing the new version.
+Silent upgrade: run the newer MSI without `ENDPOINT` / auth properties;
+existing settings are kept. Pass those properties only when you want to change
+the connection settings. The legacy 1.0.0 MSI had an uninstall launch-condition
+bug, so upgrade that release through the full installer UI; the compatibility
+flow removes it before installing the new version.
 
 The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time and choose **Sync Now**. Exit closes only the tray helper; the `AssetBeeDrone` service keeps running. The tray talks to the service through `%ProgramData%\AssetBee\Drone\` (status heartbeat + sync request files).
 
