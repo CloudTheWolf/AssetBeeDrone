@@ -1,10 +1,11 @@
 # Writes appsettings.json during MSI install (and mirrors values for upgrade pre-fill).
-# Resolves config from: parameters → %ProgramData%\AssetBee\Drone\msi-pending.json →
-# existing appsettings.json → HKLM registry.
+# Resolves config from: parameters → the pre-elevation pending file → the
+# legacy ProgramData pending file → existing appsettings.json → HKLM registry.
 param(
     [string] $Endpoint = '',
     [string] $BearerToken = '',
     [string] $ApiKey = '',
+    [string] $PendingPath = '',
     [Parameter(Mandatory = $true)]
     [string] $InstallDir
 )
@@ -15,18 +16,21 @@ $ErrorActionPreference = 'Stop'
 # closing quote, so WiX passes "[INSTALLFOLDER]." and we strip the marker here.
 $InstallDir = $InstallDir.Trim().TrimEnd('.').TrimEnd('\')
 
-$pendingPath = Join-Path $env:ProgramData 'AssetBee\Drone\msi-pending.json'
+$legacyPendingPath = Join-Path $env:ProgramData 'AssetBee\Drone\msi-pending.json'
 $settingsPath = Join-Path $InstallDir 'appsettings.json'
 
 function Read-Pending {
-    if (-not (Test-Path -LiteralPath $pendingPath)) {
-        return $null
+    foreach ($path in @($PendingPath, $legacyPendingPath)) {
+        if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path)) {
+            continue
+        }
+        try {
+            return Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json
+        } catch {
+            continue
+        }
     }
-    try {
-        return Get-Content -LiteralPath $pendingPath -Raw -ErrorAction Stop | ConvertFrom-Json
-    } catch {
-        return $null
-    }
+    return $null
 }
 
 function Read-ExistingSettings {
@@ -161,4 +165,8 @@ try {
 } catch {
 }
 
-Remove-Item -LiteralPath $pendingPath -Force -ErrorAction SilentlyContinue
+foreach ($path in @($PendingPath, $legacyPendingPath)) {
+    if (-not [string]::IsNullOrWhiteSpace($path)) {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
+}

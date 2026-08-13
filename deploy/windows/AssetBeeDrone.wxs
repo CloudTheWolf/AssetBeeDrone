@@ -50,6 +50,7 @@
 		<Property Id="ENDPOINT" Secure="yes" />
 		<Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
 		<Property Id="APIKEY" Secure="yes" Hidden="yes" />
+		<Property Id="PENDINGCONFIGPATH" Secure="yes" Hidden="yes" />
 
 		<!-- Existing configuration -->
 		<Property Id="BT_EXISTING" Secure="yes" Hidden="yes" />
@@ -343,6 +344,22 @@
 		<!-- Existing helper-script SetProperty declarations stay unchanged here. -->
 
 		<SetProperty
+			Id="PENDINGCONFIGPATH"
+			Action="SetPendingConfigPathUI"
+			Sequence="ui"
+			Before="ExtractMsiScripts"
+			Condition="NOT REMOVE"
+			Value="[WindowsFolder]Temp\AssetBee-Drone-[ProductCode]-pending.json" />
+
+		<SetProperty
+			Id="PENDINGCONFIGPATH"
+			Action="SetPendingConfigPathExec"
+			Sequence="execute"
+			Before="ExtractMsiScriptsElevated"
+			Condition="NOT REMOVE AND NOT PENDINGCONFIGPATH"
+			Value="[WindowsFolder]Temp\AssetBee-Drone-[ProductCode]-pending.json" />
+
+		<SetProperty
 			Id="WixQuietExecCmdLine"
 			Action="SetExtractMsiScriptsUI"
 			Sequence="ui"
@@ -386,7 +403,7 @@
 			Id="WriteAppSettings"
 			Sequence="execute"
 			Before="WriteAppSettings"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]WriteAppSettings.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -BearerToken &quot;[BEARERTOKEN]&quot; -ApiKey &quot;[APIKEY]&quot; -InstallDir &quot;[INSTALLFOLDER].&quot;" />
+			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[INSTALLFOLDER]WriteAppSettings.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Install &quot;[INSTALLFOLDER].&quot;" />
 
 		<CustomAction
 			Id="WriteAppSettings"
@@ -394,6 +411,7 @@
 			DllEntry="WixQuietExec"
 			Execute="deferred"
 			Impersonate="no"
+			HideTarget="yes"
 			Return="check" />
 
 		<CustomAction

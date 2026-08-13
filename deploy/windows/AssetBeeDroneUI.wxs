@@ -297,7 +297,7 @@
 
 					<Publish
 						Property="WixQuietExecCmdLine"
-						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -BearerToken &quot;[BEARERTOKEN]&quot; -ApiKey &quot;[APIKEY]&quot;"
+						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot;"
 						Order="5"
 						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 

@@ -1,6 +1,8 @@
-# Saves UI-entered config where the elevated deferred CA can read it (ProgramData).
-# MSI UI properties often do not cross the UAC elevation boundary reliably.
+# Saves UI-entered config where the elevated deferred CA can read it.
+# Windows Temp is writable before elevation and readable by LocalSystem afterwards.
 param(
+    [Parameter(Mandatory = $true)]
+    [string] $PendingPath,
     [string] $Endpoint = '',
     [string] $BearerToken = '',
     [string] $ApiKey = ''
@@ -8,8 +10,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$dir = Join-Path $env:ProgramData 'AssetBee\Drone'
-New-Item -ItemType Directory -Force -Path $dir | Out-Null
+$dir = Split-Path -Parent $PendingPath
+if (-not [string]::IsNullOrWhiteSpace($dir)) {
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+}
 
 $pending = @{
     Endpoint = $Endpoint
@@ -17,6 +21,5 @@ $pending = @{
     ApiKey = $ApiKey
 } | ConvertTo-Json -Compress
 
-$pendingPath = Join-Path $dir 'msi-pending.json'
-[IO.File]::WriteAllText($pendingPath, $pending)
+[IO.File]::WriteAllText($PendingPath, $pending)
 exit 0
