@@ -147,12 +147,18 @@ time.
 
 **MSI**
 
+Interactive (no properties required): double-click the MSI or run `msiexec /i AssetBee.Drone-1.0.0-win-x64.msi`. The wizard prompts for endpoint and bearer token or API key on first install.
+
+Silent first install:
+
 ```powershell
 msiexec /i AssetBee.Drone-1.0.0-win-x64.msi /qn `
   ENDPOINT=https://inventory.example.com/api/v1/inventory `
   BEARERTOKEN=secret
 # or APIKEY=secret
 ```
+
+Upgrade / reinstall: run the new MSI without `ENDPOINT` / auth properties to keep the existing `appsettings.json`. Pass those properties only when you want to change the connection settings.
 
 **Portable archive / publish folder**
 
