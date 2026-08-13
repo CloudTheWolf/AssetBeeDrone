@@ -102,7 +102,8 @@ $outputMsi = Join-Path $OutputDirectory "AssetBee.Drone-$Version-win-x64.msi"
 $savePendingPath = Join-Path $scriptDir 'SavePendingSettings.ps1'
 $loadExistingPath = Join-Path $scriptDir 'LoadExistingSettings.ps1'
 $preservePath = Join-Path $scriptDir 'PreserveExistingSettings.ps1'
-foreach ($p in @($savePendingPath, $loadExistingPath, $preservePath)) {
+$uninstallRelatedPath = Join-Path $scriptDir 'UninstallRelatedProducts.ps1'
+foreach ($p in @($savePendingPath, $loadExistingPath, $preservePath, $uninstallRelatedPath)) {
     if (-not (Test-Path -LiteralPath $p)) {
         throw "Missing $p"
     }
@@ -112,6 +113,7 @@ foreach ($p in @($savePendingPath, $loadExistingPath, $preservePath)) {
 $savePendingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($savePendingPath))
 $loadExistingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($loadExistingPath))
 $preserveSettingsB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($preservePath))
+$uninstallRelatedB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($uninstallRelatedPath))
 
 # -acceptEula is required for WiX v7+ (Open Source Maintenance Fee). See https://docs.firegiant.com/wix/osmf/
 & $wixExe build `
@@ -126,6 +128,7 @@ $preserveSettingsB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($preser
     -d "SavePendingB64=$savePendingB64" `
     -d "LoadExistingB64=$loadExistingB64" `
     -d "PreserveSettingsB64=$preserveSettingsB64" `
+    -d "UninstallRelatedB64=$uninstallRelatedB64" `
     -arch x64 `
     -o $outputMsi
 

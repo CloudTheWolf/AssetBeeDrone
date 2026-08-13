@@ -20,6 +20,19 @@
 				IncludeMinimum="yes"
 				IncludeMaximum="no" />
 
+			<!--
+				Version 1.0.0 required ENDPOINT even while RemoveExistingProducts was
+				uninstalling it. Detect that release separately so the full UI can
+				remove it before the new install transaction begins.
+			-->
+			<UpgradeVersion
+				Property="LEGACY_UPGRADE_DETECTED"
+				Minimum="1.0.0"
+				Maximum="1.0.0"
+				IncludeMinimum="yes"
+				IncludeMaximum="yes"
+				OnlyDetect="yes" />
+
 			<UpgradeVersion
 				Property="SAME_VERSION_PRODUCT"
 				Minimum="$(var.Version)"
@@ -287,7 +300,7 @@
 			Return="check" />
 
 		<CustomAction
-			Id="UninstallSameVersion"
+			Id="UninstallRelatedProducts"
 			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
 			DllEntry="WixQuietExec"
 			Execute="immediate"
@@ -365,7 +378,7 @@
 			Sequence="ui"
 			Before="ExtractMsiScripts"
 			Condition="NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$d=$env:TEMP; $c=Join-Path $env:SystemRoot 'System32\certutil.exe'; Set-Content -LiteralPath (Join-Path $d 'ab-sp.b64') -Value '$(var.SavePendingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-sp.b64') (Join-Path $d 'AssetBee-SavePending.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-le.b64') -Value '$(var.LoadExistingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-le.b64') (Join-Path $d 'AssetBee-LoadExisting.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-ps.b64') -Value '$(var.PreserveSettingsB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-ps.b64') (Join-Path $d 'AssetBee-PreserveSettings.ps1') | Out-Null; exit 0&quot;" />
+			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$d=$env:TEMP; $c=Join-Path $env:SystemRoot 'System32\certutil.exe'; Set-Content -LiteralPath (Join-Path $d 'ab-sp.b64') -Value '$(var.SavePendingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-sp.b64') (Join-Path $d 'AssetBee-SavePending.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-le.b64') -Value '$(var.LoadExistingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-le.b64') (Join-Path $d 'AssetBee-LoadExisting.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-ps.b64') -Value '$(var.PreserveSettingsB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-ps.b64') (Join-Path $d 'AssetBee-PreserveSettings.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-ur.b64') -Value '$(var.UninstallRelatedB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-ur.b64') (Join-Path $d 'AssetBee-UninstallRelated.ps1') | Out-Null; exit 0&quot;" />
 
 		<SetProperty
 			Id="WixQuietExecCmdLine"
@@ -463,6 +476,21 @@
 				Action="LoadExistingSettings"
 				After="SetApiKeyExistingFromHkcu"
 				Condition="NOT REMOVE" />
+
+			<Custom
+				Action="RestoreBearerOnly"
+				After="LoadExistingSettings"
+				Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT AK_EXISTING AND NOT REMOVE" />
+
+			<Custom
+				Action="RestoreApiKeyOnly"
+				After="RestoreBearerOnly"
+				Condition="NOT BEARERTOKEN AND NOT APIKEY AND AK_EXISTING AND NOT REMOVE" />
+
+			<Custom
+				Action="RestoreBearerPrefer"
+				After="RestoreApiKeyOnly"
+				Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT REMOVE" />
 
 		</InstallUISequence>
 

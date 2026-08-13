@@ -86,12 +86,12 @@
 
 					<Publish
 						Property="WixQuietExecCmdLine"
-						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$codes = ('[SAME_VERSION_PRODUCT]' -split ';') | Where-Object { $_; }; $msi = Join-Path $env:SystemRoot 'System32\msiexec.exe'; foreach ($c in $codes) { $args = @('/x', $c, '/qb'); if ('[ENDPOINT]') { $args += 'ENDPOINT=&quot;[ENDPOINT]&quot;' }; $p = Start-Process -FilePath $msi -ArgumentList $args -Wait -PassThru; if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode } }; exit 0&quot;"
+						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[SAME_VERSION_PRODUCT]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui basic"
 						Order="1" />
 
 					<Publish
 						Event="DoAction"
-						Value="UninstallSameVersion"
+						Value="UninstallRelatedProducts"
 						Order="2" />
 
 					<Publish
@@ -257,7 +257,15 @@
 
 					<Publish
 						Event="NewDialog"
-						Value="LicenseAgreementDlg" />
+						Value="LicenseAgreementDlg"
+						Order="1"
+						Condition="NOT WIX_UPGRADE_DETECTED" />
+
+					<Publish
+						Event="NewDialog"
+						Value="WelcomeDlg"
+						Order="2"
+						Condition="WIX_UPGRADE_DETECTED" />
 
 				</Control>
 
@@ -308,9 +316,21 @@
 						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 					<Publish
+						Property="WixQuietExecCmdLine"
+						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[LEGACY_UPGRADE_DETECTED]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui quiet"
+						Order="7"
+						Condition="LEGACY_UPGRADE_DETECTED AND ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+					<Publish
+						Event="DoAction"
+						Value="UninstallRelatedProducts"
+						Order="8"
+						Condition="LEGACY_UPGRADE_DETECTED AND ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+					<Publish
 						Event="NewDialog"
 						Value="InstallDirDlg"
-						Order="7"
+						Order="9"
 						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 				</Control>
@@ -389,10 +409,51 @@
 			<Publish
 				Dialog="WelcomeDlg"
 				Control="Next"
+				Property="WixQuietExecCmdLine"
+				Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot;"
+				Order="4"
+				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+			<Publish
+				Dialog="WelcomeDlg"
+				Control="Next"
+				Event="DoAction"
+				Value="SavePendingSettings"
+				Order="5"
+				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+			<Publish
+				Dialog="WelcomeDlg"
+				Control="Next"
+				Property="WixQuietExecCmdLine"
+				Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[LEGACY_UPGRADE_DETECTED]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui quiet"
+				Order="6"
+				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+			<Publish
+				Dialog="WelcomeDlg"
+				Control="Next"
+				Event="DoAction"
+				Value="UninstallRelatedProducts"
+				Order="7"
+				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+			<Publish
+				Dialog="WelcomeDlg"
+				Control="Next"
 				Event="NewDialog"
 				Value="VerifyReadyDlg"
-				Order="4"
-				Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
+				Order="8"
+				Condition="NOT Installed AND WIX_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+
+			<!-- An upgrade without reusable settings is configured through the UI. -->
+			<Publish
+				Dialog="WelcomeDlg"
+				Control="Next"
+				Event="NewDialog"
+				Value="ConfigDlg"
+				Order="9"
+				Condition="NOT Installed AND WIX_UPGRADE_DETECTED AND (NOT ENDPOINT OR NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN)))" />
 
 			<!-- Fresh install -->
 			<Publish
