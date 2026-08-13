@@ -11,6 +11,7 @@
       Language="1033">
     <MajorUpgrade DowngradeErrorMessage="A newer version of AssetBee Drone is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.SourceDir)\License.rtf" />
 
     <Property Id="ENDPOINT" Secure="yes" />
     <Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
