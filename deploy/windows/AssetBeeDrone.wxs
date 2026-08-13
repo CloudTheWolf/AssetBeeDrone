@@ -9,7 +9,6 @@
       UpgradeCode="A7E3C2B1-4D5F-6A78-9B0C-1D2E3F4A5B6C"
       Scope="perMachine"
       Language="1033">
-    <!-- Older → upgrade in place; same version → detect for UI choice; newer → block. -->
     <Upgrade Id="A7E3C2B1-4D5F-6A78-9B0C-1D2E3F4A5B6C">
       <UpgradeVersion
           Property="WIX_UPGRADE_DETECTED"
@@ -44,53 +43,22 @@
     <Property Id="AK_EXISTING" Secure="yes" Hidden="yes" />
 
     <Property Id="EP_HKLM" Secure="yes">
-      <RegistrySearch
-          Id="ExistingEndpointHklm"
-          Root="HKLM"
-          Key="SOFTWARE\AssetBee\Drone"
-          Name="Endpoint"
-          Type="raw" />
+      <RegistrySearch Id="ExistingEndpointHklm" Root="HKLM" Key="SOFTWARE\AssetBee\Drone" Name="Endpoint" Type="raw" />
     </Property>
     <Property Id="BT_HKLM" Secure="yes" Hidden="yes">
-      <RegistrySearch
-          Id="ExistingBearerHklm"
-          Root="HKLM"
-          Key="SOFTWARE\AssetBee\Drone"
-          Name="BearerToken"
-          Type="raw" />
+      <RegistrySearch Id="ExistingBearerHklm" Root="HKLM" Key="SOFTWARE\AssetBee\Drone" Name="BearerToken" Type="raw" />
     </Property>
     <Property Id="AK_HKLM" Secure="yes" Hidden="yes">
-      <RegistrySearch
-          Id="ExistingApiKeyHklm"
-          Root="HKLM"
-          Key="SOFTWARE\AssetBee\Drone"
-          Name="ApiKey"
-          Type="raw" />
+      <RegistrySearch Id="ExistingApiKeyHklm" Root="HKLM" Key="SOFTWARE\AssetBee\Drone" Name="ApiKey" Type="raw" />
     </Property>
-
     <Property Id="EP_HKCU" Secure="yes">
-      <RegistrySearch
-          Id="ExistingEndpointHkcu"
-          Root="HKCU"
-          Key="SOFTWARE\AssetBee\Drone"
-          Name="Endpoint"
-          Type="raw" />
+      <RegistrySearch Id="ExistingEndpointHkcu" Root="HKCU" Key="SOFTWARE\AssetBee\Drone" Name="Endpoint" Type="raw" />
     </Property>
     <Property Id="BT_HKCU" Secure="yes" Hidden="yes">
-      <RegistrySearch
-          Id="ExistingBearerHkcu"
-          Root="HKCU"
-          Key="SOFTWARE\AssetBee\Drone"
-          Name="BearerToken"
-          Type="raw" />
+      <RegistrySearch Id="ExistingBearerHkcu" Root="HKCU" Key="SOFTWARE\AssetBee\Drone" Name="BearerToken" Type="raw" />
     </Property>
     <Property Id="AK_HKCU" Secure="yes" Hidden="yes">
-      <RegistrySearch
-          Id="ExistingApiKeyHkcu"
-          Root="HKCU"
-          Key="SOFTWARE\AssetBee\Drone"
-          Name="ApiKey"
-          Type="raw" />
+      <RegistrySearch Id="ExistingApiKeyHkcu" Root="HKCU" Key="SOFTWARE\AssetBee\Drone" Name="ApiKey" Type="raw" />
     </Property>
 
     <Feature Id="Main" Title="AssetBee Drone" Level="1">
@@ -160,37 +128,12 @@
 
     <UIRef Id="AssetBeeDroneUI" />
 
-    <!--
-      MSI treats [...] as property refs. Escape PowerShell type literals as [\[]Type[\]],
-      or keep them only inside .ps1 files written below (file contents are not formatted).
-    -->
-    <SetProperty
-        Id="ExtractMsiScripts"
-        Sequence="first"
-        Before="ExtractMsiScripts"
-        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;[\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-SavePending.ps1'), [\[]System.Convert]::FromBase64String('$(var.SavePendingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-LoadExisting.ps1'), [\[]System.Convert]::FromBase64String('$(var.LoadExistingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-PreserveSettings.ps1'), [\[]System.Convert]::FromBase64String('$(var.PreserveSettingsB64)'))&quot;" />
-
-    <CustomAction
-        Id="ExtractMsiScripts"
-        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-        DllEntry="WixQuietExec"
-        Execute="immediate"
-        Impersonate="yes"
-        Return="ignore" />
-
-    <SetProperty
-        Id="LoadExistingSettings"
-        Sequence="first"
-        Before="LoadExistingSettings"
-        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-LoadExisting.ps1&quot;" />
-
-    <CustomAction
-        Id="LoadExistingSettings"
-        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-        DllEntry="WixQuietExec"
-        Execute="immediate"
-        Impersonate="yes"
-        Return="ignore" />
+    <!-- x64 immediate QuietExec reads WixQuietExec64CmdLine. Escape PS types as [\[]System.IO.File]. -->
+    <CustomAction Id="ExtractMsiScripts" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="yes" Return="ignore" />
+    <CustomAction Id="LoadExistingSettings" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="yes" Return="ignore" />
+    <CustomAction Id="PreserveExistingSettings" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="no" Return="ignore" />
+    <CustomAction Id="SavePendingSettings" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="yes" Return="check" />
+    <CustomAction Id="UninstallSameVersion" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="no" Return="check" />
 
     <CustomAction Id="SetEndpointFromHklm" Property="ENDPOINT" Value="[EP_HKLM]" />
     <CustomAction Id="SetEndpointFromHkcu" Property="ENDPOINT" Value="[EP_HKCU]" />
@@ -198,41 +141,54 @@
     <CustomAction Id="SetBearerExistingFromHkcu" Property="BT_EXISTING" Value="[BT_HKCU]" />
     <CustomAction Id="SetApiKeyExistingFromHklm" Property="AK_EXISTING" Value="[AK_HKLM]" />
     <CustomAction Id="SetApiKeyExistingFromHkcu" Property="AK_EXISTING" Value="[AK_HKCU]" />
-
     <CustomAction Id="RestoreBearerOnly" Property="BEARERTOKEN" Value="[BT_EXISTING]" />
     <CustomAction Id="RestoreApiKeyOnly" Property="APIKEY" Value="[AK_EXISTING]" />
     <CustomAction Id="RestoreBearerPrefer" Property="BEARERTOKEN" Value="[BT_EXISTING]" />
 
     <SetProperty
-        Id="PreserveExistingSettings"
+        Id="WixQuietExec64CmdLine"
+        Action="SetExtractMsiScriptsUI"
+        Sequence="ui"
+        Before="ExtractMsiScripts"
+        Condition="NOT REMOVE"
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;[\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-SavePending.ps1'), [\[]System.Convert]::FromBase64String('$(var.SavePendingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-LoadExisting.ps1'), [\[]System.Convert]::FromBase64String('$(var.LoadExistingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-PreserveSettings.ps1'), [\[]System.Convert]::FromBase64String('$(var.PreserveSettingsB64)'))&quot;" />
+
+    <SetProperty
+        Id="WixQuietExec64CmdLine"
+        Action="SetLoadExistingSettingsUI"
+        Sequence="ui"
+        After="ExtractMsiScripts"
+        Before="LoadExistingSettings"
+        Condition="NOT REMOVE"
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-LoadExisting.ps1&quot;" />
+
+    <SetProperty
+        Id="WixQuietExec64CmdLine"
+        Action="SetExtractMsiScriptsExec"
         Sequence="execute"
+        Before="ExtractMsiScripts"
+        Condition="NOT REMOVE"
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;[\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-SavePending.ps1'), [\[]System.Convert]::FromBase64String('$(var.SavePendingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-LoadExisting.ps1'), [\[]System.Convert]::FromBase64String('$(var.LoadExistingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-PreserveSettings.ps1'), [\[]System.Convert]::FromBase64String('$(var.PreserveSettingsB64)'))&quot;" />
+
+    <SetProperty
+        Id="WixQuietExec64CmdLine"
+        Action="SetLoadExistingSettingsExec"
+        Sequence="execute"
+        After="ExtractMsiScripts"
+        Before="LoadExistingSettings"
+        Condition="NOT REMOVE"
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-LoadExisting.ps1&quot;" />
+
+    <SetProperty
+        Id="WixQuietExec64CmdLine"
+        Action="SetPreserveExistingSettings"
+        Sequence="execute"
+        After="InstallInitialize"
         Before="PreserveExistingSettings"
+        Condition="(WIX_UPGRADE_DETECTED OR SAME_VERSION_PRODUCT) AND NOT REMOVE"
         Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-PreserveSettings.ps1&quot;" />
 
-    <CustomAction
-        Id="PreserveExistingSettings"
-        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-        DllEntry="WixQuietExec"
-        Execute="immediate"
-        Impersonate="no"
-        Return="ignore" />
-
-    <CustomAction
-        Id="SavePendingSettings"
-        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-        DllEntry="WixQuietExec"
-        Execute="immediate"
-        Impersonate="yes"
-        Return="check" />
-
-    <CustomAction
-        Id="UninstallSameVersion"
-        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-        DllEntry="WixQuietExec"
-        Execute="immediate"
-        Impersonate="no"
-        Return="check" />
-
+    <!-- Deferred QuietExec64 uses CustomActionData from property Id == CA Id. -->
     <SetProperty
         Id="WriteAppSettings"
         Sequence="execute"
@@ -241,8 +197,8 @@
 
     <CustomAction
         Id="WriteAppSettings"
-        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-        DllEntry="WixQuietExec"
+        BinaryRef="Wix4UtilCA_X64"
+        DllEntry="WixQuietExec64"
         Execute="deferred"
         Impersonate="no"
         Return="check" />
@@ -257,7 +213,7 @@
 
     <InstallUISequence>
       <Custom Action="ExtractMsiScripts" Before="AppSearch" Condition="NOT REMOVE" />
-      <Custom Action="LoadExistingSettings" After="ExtractMsiScripts" Condition="NOT REMOVE" />
+      <Custom Action="LoadExistingSettings" After="SetLoadExistingSettingsUI" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
       <Custom Action="SetBearerExistingFromHklm" After="AppSearch" Condition="NOT BT_EXISTING AND BT_HKLM" />
@@ -268,7 +224,7 @@
 
     <InstallExecuteSequence>
       <Custom Action="ExtractMsiScripts" Before="AppSearch" Condition="NOT REMOVE" />
-      <Custom Action="LoadExistingSettings" After="ExtractMsiScripts" Condition="NOT REMOVE" />
+      <Custom Action="LoadExistingSettings" After="SetLoadExistingSettingsExec" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
       <Custom Action="SetBearerExistingFromHklm" After="AppSearch" Condition="NOT BT_EXISTING AND BT_HKLM" />
@@ -280,17 +236,11 @@
       <Custom Action="RestoreBearerPrefer" After="RestoreApiKeyOnly" Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT REMOVE" />
       <Custom
           Action="PreserveExistingSettings"
-          After="InstallInitialize"
+          After="SetPreserveExistingSettings"
           Condition="(WIX_UPGRADE_DETECTED OR SAME_VERSION_PRODUCT) AND NOT REMOVE" />
       <RemoveExistingProducts After="PreserveExistingSettings" />
-      <Custom
-          Action="WriteAppSettings"
-          Before="StartServices"
-          Condition="NOT REMOVE" />
-      <Custom
-          Action="LaunchTray"
-          After="InstallFinalize"
-          Condition="NOT REMOVE" />
+      <Custom Action="WriteAppSettings" Before="StartServices" Condition="NOT REMOVE" />
+      <Custom Action="LaunchTray" After="InstallFinalize" Condition="NOT REMOVE" />
     </InstallExecuteSequence>
   </Package>
 </Wix>
