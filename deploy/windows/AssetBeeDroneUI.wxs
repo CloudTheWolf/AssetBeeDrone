@@ -21,7 +21,7 @@
         <Control Id="Uninstall" Type="PushButton" X="116" Y="195" Width="70" Height="17" Text="Uninstall">
           <Publish
               Property="UninstallSameVersion"
-              Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$codes = ('[SAME_VERSION_PRODUCT]' -split ';') | Where-Object { $_; }; foreach ($c in $codes) { $p = Start-Process -FilePath ([IO.Path]::Combine([Environment]::SystemDirectory, 'msiexec.exe')) -ArgumentList @('/x', $c, '/qb') -Wait -PassThru; if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode } }; exit 0&quot;"
+              Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$codes = ('[SAME_VERSION_PRODUCT]' -split ';') | Where-Object { $_; }; $msi = Join-Path $env:SystemRoot 'System32\msiexec.exe'; foreach ($c in $codes) { $p = Start-Process -FilePath $msi -ArgumentList @('/x', $c, '/qb') -Wait -PassThru; if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode } }; exit 0&quot;"
               Order="1" />
           <Publish Event="DoAction" Value="UninstallSameVersion" Order="2" />
           <Publish Event="EndDialog" Value="Exit" Order="3" />

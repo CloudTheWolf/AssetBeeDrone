@@ -57,15 +57,15 @@ if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
 $outputMsi = Join-Path $OutputDirectory "AssetBee.Drone-$Version-win-x64.msi"
 
 $savePendingPath = Join-Path $scriptDir 'SavePendingSettings.ps1'
-if (-not (Test-Path -LiteralPath $savePendingPath)) {
-    throw "Missing $savePendingPath"
+$loadExistingPath = Join-Path $scriptDir 'LoadExistingSettings.ps1'
+$preservePath = Join-Path $scriptDir 'PreserveExistingSettings.ps1'
+foreach ($p in @($savePendingPath, $loadExistingPath, $preservePath)) {
+    if (-not (Test-Path -LiteralPath $p)) {
+        throw "Missing $p"
+    }
 }
 $savePendingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($savePendingPath))
-
-$preservePath = Join-Path $scriptDir 'PreserveExistingSettings.ps1'
-if (-not (Test-Path -LiteralPath $preservePath)) {
-    throw "Missing $preservePath"
-}
+$loadExistingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($loadExistingPath))
 $preserveSettingsB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($preservePath))
 
 & wix build `
@@ -77,6 +77,7 @@ $preserveSettingsB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($preser
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `
     -d "SavePendingB64=$savePendingB64" `
+    -d "LoadExistingB64=$loadExistingB64" `
     -d "PreserveSettingsB64=$preserveSettingsB64" `
     -arch x64 `
     -o $outputMsi
