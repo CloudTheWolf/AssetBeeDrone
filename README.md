@@ -141,7 +141,7 @@ Native AOT publish and native package builds must run on the matching OS family
 # Linux / macOS host
 ./deploy/packaging/build.sh --rid linux-x64 --publish-dir bin/Release/net10.0/linux-x64/publish
 
-# Windows host (PowerShell)
+# Windows host (PowerShell) — uses WiX Toolset 7.0 (`build-msi.ps1` accepts the OSMF EULA for CI/local builds)
 .\deploy\packaging\build-archive.ps1 -PublishDirectory .\bin\Release\net10.0\win-x64\publish -Rid win-x64
 .\deploy\windows\build-msi.ps1 -PublishDirectory .\bin\Release\net10.0\win-x64\publish
 ```

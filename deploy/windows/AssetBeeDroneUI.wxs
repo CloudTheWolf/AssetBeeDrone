@@ -20,7 +20,7 @@
         <Control Id="BottomLine" Type="Line" X="0" Y="184" Width="370" Height="0" />
         <Control Id="Uninstall" Type="PushButton" X="116" Y="195" Width="70" Height="17" Text="Uninstall">
           <Publish
-              Property="WixQuietExec64CmdLine"
+              Property="WixQuietExecCmdLine"
               Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$codes = ('[SAME_VERSION_PRODUCT]' -split ';') | Where-Object { $_; }; $msi = Join-Path $env:SystemRoot 'System32\msiexec.exe'; foreach ($c in $codes) { $p = Start-Process -FilePath $msi -ArgumentList @('/x', $c, '/qb') -Wait -PassThru; if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode } }; exit 0&quot;"
               Order="1" />
           <Publish Event="DoAction" Value="UninstallSameVersion" Order="2" />
@@ -67,7 +67,7 @@
               Order="4"
               Condition="NOT ENDPOINT OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
           <Publish
-              Property="WixQuietExec64CmdLine"
+              Property="WixQuietExecCmdLine"
               Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -BearerToken &quot;[BEARERTOKEN]&quot; -ApiKey &quot;[APIKEY]&quot;"
               Order="5"
               Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />

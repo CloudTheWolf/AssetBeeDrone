@@ -128,12 +128,18 @@
 
     <UIRef Id="AssetBeeDroneUI" />
 
-    <!-- x64 immediate QuietExec reads WixQuietExec64CmdLine. Escape PS types as [\[]System.IO.File]. -->
-    <CustomAction Id="ExtractMsiScripts" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="yes" Return="ignore" />
-    <CustomAction Id="LoadExistingSettings" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="yes" Return="ignore" />
-    <CustomAction Id="PreserveExistingSettings" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="no" Return="ignore" />
-    <CustomAction Id="SavePendingSettings" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="yes" Return="check" />
-    <CustomAction Id="UninstallSameVersion" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64" Execute="immediate" Impersonate="no" Return="check" />
+    <!--
+      Extract helper scripts with certutil (no PowerShell [Type] literals).
+      MSI formatted strings strip [...] so [System.Convert]::FromBase64String becomes ::FromBase64String.
+      UI writes to user Temp; elevated execute writes to ProgramData for PreserveExistingSettings.
+      x64 immediate QuietExec reads WixQuietExecCmdLine.
+    -->
+    <CustomAction Id="ExtractMsiScripts" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Impersonate="yes" Return="check" />
+    <CustomAction Id="ExtractMsiScriptsElevated" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Impersonate="no" Return="check" />
+    <CustomAction Id="LoadExistingSettings" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Impersonate="yes" Return="ignore" />
+    <CustomAction Id="PreserveExistingSettings" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Impersonate="no" Return="ignore" />
+    <CustomAction Id="SavePendingSettings" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Impersonate="yes" Return="check" />
+    <CustomAction Id="UninstallSameVersion" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="immediate" Impersonate="no" Return="check" />
 
     <CustomAction Id="SetEndpointFromHklm" Property="ENDPOINT" Value="[EP_HKLM]" />
     <CustomAction Id="SetEndpointFromHkcu" Property="ENDPOINT" Value="[EP_HKCU]" />
@@ -146,15 +152,23 @@
     <CustomAction Id="RestoreBearerPrefer" Property="BEARERTOKEN" Value="[BT_EXISTING]" />
 
     <SetProperty
-        Id="WixQuietExec64CmdLine"
+        Id="WixQuietExecCmdLine"
         Action="SetExtractMsiScriptsUI"
         Sequence="ui"
         Before="ExtractMsiScripts"
         Condition="NOT REMOVE"
-        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;[\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-SavePending.ps1'), [\[]System.Convert]::FromBase64String('$(var.SavePendingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-LoadExisting.ps1'), [\[]System.Convert]::FromBase64String('$(var.LoadExistingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-PreserveSettings.ps1'), [\[]System.Convert]::FromBase64String('$(var.PreserveSettingsB64)'))&quot;" />
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$d=$env:TEMP; $c=Join-Path $env:SystemRoot 'System32\certutil.exe'; Set-Content -LiteralPath (Join-Path $d 'ab-sp.b64') -Value '$(var.SavePendingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-sp.b64') (Join-Path $d 'AssetBee-SavePending.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-le.b64') -Value '$(var.LoadExistingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-le.b64') (Join-Path $d 'AssetBee-LoadExisting.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-ps.b64') -Value '$(var.PreserveSettingsB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-ps.b64') (Join-Path $d 'AssetBee-PreserveSettings.ps1') | Out-Null; if (-not (Test-Path -LiteralPath (Join-Path $d 'AssetBee-SavePending.ps1'))) { exit 1 }; exit 0&quot;" />
 
     <SetProperty
-        Id="WixQuietExec64CmdLine"
+        Id="WixQuietExecCmdLine"
+        Action="SetExtractMsiScriptsElevated"
+        Sequence="execute"
+        Before="ExtractMsiScriptsElevated"
+        Condition="NOT REMOVE"
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$d=Join-Path $env:ProgramData 'AssetBee\Drone\msi-scripts'; New-Item -ItemType Directory -Force -Path $d | Out-Null; $c=Join-Path $env:SystemRoot 'System32\certutil.exe'; Set-Content -LiteralPath (Join-Path $d 'ab-sp.b64') -Value '$(var.SavePendingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-sp.b64') (Join-Path $d 'AssetBee-SavePending.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-le.b64') -Value '$(var.LoadExistingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-le.b64') (Join-Path $d 'AssetBee-LoadExisting.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-ps.b64') -Value '$(var.PreserveSettingsB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-ps.b64') (Join-Path $d 'AssetBee-PreserveSettings.ps1') | Out-Null; if (-not (Test-Path -LiteralPath (Join-Path $d 'AssetBee-PreserveSettings.ps1'))) { exit 1 }; exit 0&quot;" />
+
+    <SetProperty
+        Id="WixQuietExecCmdLine"
         Action="SetLoadExistingSettingsUI"
         Sequence="ui"
         Before="LoadExistingSettings"
@@ -162,30 +176,21 @@
         Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-LoadExisting.ps1&quot;" />
 
     <SetProperty
-        Id="WixQuietExec64CmdLine"
-        Action="SetExtractMsiScriptsExec"
-        Sequence="execute"
-        Before="ExtractMsiScripts"
-        Condition="NOT REMOVE"
-        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;[\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-SavePending.ps1'), [\[]System.Convert]::FromBase64String('$(var.SavePendingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-LoadExisting.ps1'), [\[]System.Convert]::FromBase64String('$(var.LoadExistingB64)')); [\[]System.IO.File]::WriteAllBytes((Join-Path $env:TEMP 'AssetBee-PreserveSettings.ps1'), [\[]System.Convert]::FromBase64String('$(var.PreserveSettingsB64)'))&quot;" />
-
-    <SetProperty
-        Id="WixQuietExec64CmdLine"
+        Id="WixQuietExecCmdLine"
         Action="SetLoadExistingSettingsExec"
         Sequence="execute"
         Before="LoadExistingSettings"
         Condition="NOT REMOVE"
-        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-LoadExisting.ps1&quot;" />
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[CommonAppDataFolder]AssetBee\Drone\msi-scripts\AssetBee-LoadExisting.ps1&quot;" />
 
     <SetProperty
-        Id="WixQuietExec64CmdLine"
+        Id="WixQuietExecCmdLine"
         Action="SetPreserveExistingSettings"
         Sequence="execute"
         Before="PreserveExistingSettings"
         Condition="(WIX_UPGRADE_DETECTED OR SAME_VERSION_PRODUCT) AND NOT REMOVE"
-        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-PreserveSettings.ps1&quot;" />
+        Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[CommonAppDataFolder]AssetBee\Drone\msi-scripts\AssetBee-PreserveSettings.ps1&quot;" />
 
-    <!-- Deferred QuietExec64 uses CustomActionData from property Id == CA Id. -->
     <SetProperty
         Id="WriteAppSettings"
         Sequence="execute"
@@ -194,8 +199,8 @@
 
     <CustomAction
         Id="WriteAppSettings"
-        BinaryRef="Wix4UtilCA_X64"
-        DllEntry="WixQuietExec64"
+        BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+        DllEntry="WixQuietExec"
         Execute="deferred"
         Impersonate="no"
         Return="check" />
@@ -209,8 +214,8 @@
         Return="asyncNoWait" />
 
     <InstallUISequence>
-      <Custom Action="ExtractMsiScripts" Before="AppSearch" Condition="NOT REMOVE" />
-      <Custom Action="LoadExistingSettings" After="ExtractMsiScripts" Condition="NOT REMOVE" />
+      <Custom Action="ExtractMsiScripts" Before="LoadExistingSettings" Condition="NOT REMOVE" />
+      <Custom Action="LoadExistingSettings" Before="AppSearch" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
       <Custom Action="SetBearerExistingFromHklm" After="AppSearch" Condition="NOT BT_EXISTING AND BT_HKLM" />
@@ -220,8 +225,8 @@
     </InstallUISequence>
 
     <InstallExecuteSequence>
-      <Custom Action="ExtractMsiScripts" Before="AppSearch" Condition="NOT REMOVE" />
-      <Custom Action="LoadExistingSettings" After="ExtractMsiScripts" Condition="NOT REMOVE" />
+      <Custom Action="ExtractMsiScriptsElevated" Before="LoadExistingSettings" Condition="NOT REMOVE" />
+      <Custom Action="LoadExistingSettings" Before="AppSearch" Condition="NOT REMOVE" />
       <Custom Action="SetEndpointFromHklm" After="AppSearch" Condition="NOT ENDPOINT AND EP_HKLM" />
       <Custom Action="SetEndpointFromHkcu" After="SetEndpointFromHklm" Condition="NOT ENDPOINT AND EP_HKCU" />
       <Custom Action="SetBearerExistingFromHklm" After="AppSearch" Condition="NOT BT_EXISTING AND BT_HKLM" />

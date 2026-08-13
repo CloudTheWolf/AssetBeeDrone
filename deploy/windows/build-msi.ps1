@@ -44,15 +44,29 @@ if (-not (Test-Path -LiteralPath $tray)) {
     throw "Tray binary not found after publish: $tray"
 }
 
-if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
-    Write-Host 'WiX CLI not found on PATH; installing via dotnet tool...'
-    & dotnet tool update --global wix --version 5.0.2
-    $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+$wixVersion = '7.0.0'
+$wixEulaId = 'wix7'
+$wixToolDir = Join-Path $env:USERPROFILE '.dotnet\tools'
+$wixExe = Join-Path $wixToolDir 'wix.exe'
+
+# Pin WiX CLI + extensions so mismatched installs cannot break the build.
+Write-Host "Ensuring WiX CLI $wixVersion (dotnet tool)..."
+& dotnet tool update --global wix --version $wixVersion
+if ($LASTEXITCODE -ne 0) {
+    & dotnet tool install --global wix --version $wixVersion
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to install WiX CLI $wixVersion"
+    }
 }
 
-& wix --version | Out-Host
-& wix extension add -g WixToolset.Util.wixext/5.0.2 2>$null
-& wix extension add -g WixToolset.UI.wixext/5.0.2 2>$null
+if (-not (Test-Path -LiteralPath $wixExe)) {
+    throw "WiX CLI not found at $wixExe after install"
+}
+
+$env:PATH = "$wixToolDir;$env:PATH"
+& $wixExe --version | Out-Host
+& $wixExe extension add -g "WixToolset.Util.wixext/$wixVersion"
+& $wixExe extension add -g "WixToolset.UI.wixext/$wixVersion"
 
 $outputMsi = Join-Path $OutputDirectory "AssetBee.Drone-$Version-win-x64.msi"
 
@@ -64,15 +78,19 @@ foreach ($p in @($savePendingPath, $loadExistingPath, $preservePath)) {
         throw "Missing $p"
     }
 }
+
+# Embed scripts as base64; ExtractMsiScripts decodes with certutil (no [Type] literals in MSI strings).
 $savePendingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($savePendingPath))
 $loadExistingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($loadExistingPath))
 $preserveSettingsB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($preservePath))
 
-& wix build `
+# -acceptEula is required for WiX v7+ (Open Source Maintenance Fee). See https://docs.firegiant.com/wix/osmf/
+& $wixExe build `
+    -acceptEula $wixEulaId `
     (Join-Path $scriptDir 'AssetBeeDrone.wxs') `
     (Join-Path $scriptDir 'AssetBeeDroneUI.wxs') `
-    -ext WixToolset.Util.wixext `
-    -ext WixToolset.UI.wixext `
+    -ext "WixToolset.Util.wixext/$wixVersion" `
+    -ext "WixToolset.UI.wixext/$wixVersion" `
     -d "Version=$Version" `
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `
