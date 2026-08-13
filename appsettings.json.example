@@ -1,13 +1,13 @@
 {
   "Drone": {
-    "Endpoint": "http://localhost:8000/api/v1/inventory",
-    "CollectionIntervalMinutes": 360,
+    "Endpoint": "http://assets.mysite.com/api/v1/inventory",
+    "CollectionIntervalMinutes": 3600,
     "RequestTimeoutSeconds": 30,
     "MaxRetryAttempts": 3,
-    "BearerToken": "abk_8UQBaVNjfL9MEorAU8O8M73Hk3tyxCeC4jQ0GTcwB8HHExemhlVNOUz5qdgLf5nZ",
+    "BearerToken": "abk_MyKey",
     "ApiKey": null,
     "Type": null,
-    "Debug": true,
+    "Debug": false,
     "DebugOutputPath": "inventory-debug.json",
     "IncludeSbom": true,
     "IncludeContainerSboms": true
