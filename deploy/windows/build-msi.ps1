@@ -56,6 +56,12 @@ if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
 
 $outputMsi = Join-Path $OutputDirectory "AssetBee.Drone-$Version-win-x64.msi"
 
+$savePendingPath = Join-Path $scriptDir 'SavePendingSettings.ps1'
+if (-not (Test-Path -LiteralPath $savePendingPath)) {
+    throw "Missing $savePendingPath"
+}
+$savePendingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($savePendingPath))
+
 & wix build `
     (Join-Path $scriptDir 'AssetBeeDrone.wxs') `
     (Join-Path $scriptDir 'AssetBeeDroneUI.wxs') `
@@ -64,6 +70,7 @@ $outputMsi = Join-Path $OutputDirectory "AssetBee.Drone-$Version-win-x64.msi"
     -d "Version=$Version" `
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `
+    -d "SavePendingB64=$savePendingB64" `
     -arch x64 `
     -o $outputMsi
 

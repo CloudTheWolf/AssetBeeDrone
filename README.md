@@ -159,7 +159,11 @@ time.
 
 **MSI**
 
-Interactive (no properties required): double-click the MSI or run `msiexec /i AssetBee.Drone-<version>-win-x64.msi`. The wizard prompts for endpoint and bearer token or API key. On upgrade or reinstall, it reads the existing `appsettings.json` (when present) and pre-fills those fields; you can confirm or change them before continuing.
+Interactive first install: double-click the MSI or run `msiexec /i AssetBee.Drone-<version>-win-x64.msi`. The wizard prompts for endpoint and bearer token or API key.
+
+- **Newer MSI over an older install:** upgrades in place and keeps existing connection settings (no config prompts).
+- **Same version already installed:** asks whether to **Reinstall** (keep settings) or **Uninstall**.
+- **Older MSI when a newer build is present:** blocked with an error.
 
 Silent first install:
 
@@ -170,7 +174,7 @@ msiexec /i AssetBee.Drone-<version>-win-x64.msi /qn `
 # or APIKEY=secret
 ```
 
-Silent upgrade / reinstall: run the new MSI without `ENDPOINT` / auth properties to keep the existing settings (loaded from disk/registry). Pass those properties only when you want to change the connection settings. In the UI, the endpoint is pre-filled when found; leave the auth fields blank to keep the existing secret (password boxes cannot display it).
+Silent upgrade: run the newer MSI without `ENDPOINT` / auth properties; existing settings are kept. Pass those properties only when you want to change the connection settings.
 
 The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time and choose **Sync Now**. Exit closes only the tray helper; the `AssetBeeDrone` service keeps running. The tray talks to the service through `%ProgramData%\AssetBee\Drone\` (status heartbeat + sync request files).
 
