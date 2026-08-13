@@ -90,7 +90,7 @@ tmp_env="$(mktemp)"
 trap 'rm -f "$tmp_env"' EXIT
 {
   printf 'Drone__Endpoint=%s\n' "$endpoint"
-  printf 'Drone__CollectionIntervalMinutes=360\n'
+  printf 'Drone__CollectionIntervalMinutes=3600\n'
   printf 'Drone__RequestTimeoutSeconds=30\n'
   printf 'Drone__MaxRetryAttempts=3\n'
   printf 'Drone__Type=\n'
