@@ -98,19 +98,23 @@
         Return="check" />
 
     <InstallExecuteSequence>
-      <Custom Action="RequireEndpoint" Before="InstallInitialize">
-        NOT Installed AND NOT WIX_UPGRADE_DETECTED AND ENDPOINT = "" AND NOT REMOVE
-      </Custom>
-      <Custom Action="RequireHttps" Before="InstallInitialize">
-        ENDPOINT &lt;&gt; "" AND NOT (ENDPOINT &lt;&lt; "https://") AND NOT REMOVE
-      </Custom>
-      <Custom Action="RequireAuth" Before="InstallInitialize">
-        ENDPOINT &lt;&gt; "" AND NOT ((BEARERTOKEN &lt;&gt; "" AND APIKEY = "") OR (BEARERTOKEN = "" AND APIKEY &lt;&gt; "")) AND NOT REMOVE
-      </Custom>
+      <Custom
+          Action="RequireEndpoint"
+          Before="InstallInitialize"
+          Condition="NOT Installed AND NOT WIX_UPGRADE_DETECTED AND ENDPOINT = &quot;&quot; AND NOT REMOVE" />
+      <Custom
+          Action="RequireHttps"
+          Before="InstallInitialize"
+          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) AND NOT REMOVE" />
+      <Custom
+          Action="RequireAuth"
+          Before="InstallInitialize"
+          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;)) AND NOT REMOVE" />
       <!-- Write settings only when the user supplied new values; upgrades keep existing appsettings.json. -->
-      <Custom Action="WriteAppSettings" Before="StartServices">
-        ENDPOINT &lt;&gt; "" AND NOT REMOVE
-      </Custom>
+      <Custom
+          Action="WriteAppSettings"
+          Before="StartServices"
+          Condition="ENDPOINT &lt;&gt; &quot;&quot; AND NOT REMOVE" />
     </InstallExecuteSequence>
   </Package>
 </Wix>

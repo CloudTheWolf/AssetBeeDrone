@@ -26,12 +26,16 @@
           <Publish Event="NewDialog" Value="InstallDirDlg" />
         </Control>
         <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
-          <Publish Event="SpawnDialog" Value="InvalidConfigDlg" Order="1">
-            ENDPOINT = "" OR NOT (ENDPOINT &lt;&lt; "https://") OR NOT ((BEARERTOKEN &lt;&gt; "" AND APIKEY = "") OR (BEARERTOKEN = "" AND APIKEY &lt;&gt; ""))
-          </Publish>
-          <Publish Event="NewDialog" Value="VerifyReadyDlg" Order="2">
-            ENDPOINT &lt;&gt; "" AND (ENDPOINT &lt;&lt; "https://") AND ((BEARERTOKEN &lt;&gt; "" AND APIKEY = "") OR (BEARERTOKEN = "" AND APIKEY &lt;&gt; ""))
-          </Publish>
+          <Publish
+              Event="SpawnDialog"
+              Value="InvalidConfigDlg"
+              Order="1"
+              Condition="ENDPOINT = &quot;&quot; OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;))" />
+          <Publish
+              Event="NewDialog"
+              Value="VerifyReadyDlg"
+              Order="2"
+              Condition="ENDPOINT &lt;&gt; &quot;&quot; AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN &lt;&gt; &quot;&quot; AND APIKEY = &quot;&quot;) OR (BEARERTOKEN = &quot;&quot; AND APIKEY &lt;&gt; &quot;&quot;))" />
         </Control>
         <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
           <Publish Event="SpawnDialog" Value="CancelDlg" />
@@ -48,12 +52,20 @@
       </Dialog>
 
       <!-- Fresh interactive install without msiexec properties: collect config after the directory page. -->
-      <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="ConfigDlg" Order="3">
-        NOT WIX_UPGRADE_DETECTED AND ENDPOINT = ""
-      </Publish>
-      <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="4">
-        WIX_UPGRADE_DETECTED OR ENDPOINT &lt;&gt; ""
-      </Publish>
+      <Publish
+          Dialog="InstallDirDlg"
+          Control="Next"
+          Event="NewDialog"
+          Value="ConfigDlg"
+          Order="3"
+          Condition="NOT WIX_UPGRADE_DETECTED AND ENDPOINT = &quot;&quot;" />
+      <Publish
+          Dialog="InstallDirDlg"
+          Control="Next"
+          Event="NewDialog"
+          Value="VerifyReadyDlg"
+          Order="4"
+          Condition="WIX_UPGRADE_DETECTED OR ENDPOINT &lt;&gt; &quot;&quot;" />
     </UI>
   </Fragment>
 </Wix>
