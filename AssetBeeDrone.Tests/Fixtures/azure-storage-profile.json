@@ -1,0 +1,29 @@
+{
+  "osDisk": {
+    "name": "osdisk-linux",
+    "caching": "ReadWrite",
+    "createOption": "FromImage",
+    "diskSizeGB": 30,
+    "managedDisk": {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/disks/osdisk-linux",
+      "storageAccountType": "Premium_LRS"
+    },
+    "osType": "Linux"
+  },
+  "dataDisks": [
+    {
+      "name": "datadisk-1",
+      "lun": 0,
+      "caching": "None",
+      "createOption": "Attach",
+      "diskSizeGB": 128,
+      "managedDisk": {
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/disks/datadisk-1",
+        "storageAccountType": "Standard_LRS"
+      },
+      "encryptionSettings": {
+        "enabled": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+sda
+├─sda1 ext4 /boot/efi
+└─sda2 ext4 /

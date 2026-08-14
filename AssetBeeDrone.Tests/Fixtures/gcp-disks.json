@@ -1,0 +1,20 @@
+[
+  {
+    "deviceName": "boot",
+    "index": 0,
+    "mode": "READ_WRITE",
+    "type": "PERSISTENT"
+  },
+  {
+    "deviceName": "persistent-disk-1",
+    "index": 1,
+    "mode": "READ_WRITE",
+    "type": "PERSISTENT"
+  },
+  {
+    "deviceName": "local-ssd-0",
+    "index": 2,
+    "mode": "READ_WRITE",
+    "type": "SCRATCH"
+  }
+]

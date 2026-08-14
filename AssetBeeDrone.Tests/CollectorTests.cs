@@ -166,6 +166,148 @@ public sealed class CollectorTests
     }
 
     [Fact]
+    public async Task Linux_collector_reports_expanded_antivirus_units()
+    {
+        string lsblk = await ReadFixtureAsync("linux-lsblk.txt");
+        string lsblkJson = await ReadFixtureAsync("linux-lsblk.json");
+        FakeProcessRunner runner = new((file, arguments) => (file, string.Join(' ', arguments)) switch
+        {
+            ("lsblk", string value) when value.Contains("-J", StringComparison.Ordinal) =>
+                new ProcessResult(0, lsblkJson, string.Empty),
+            ("lsblk", _) => new ProcessResult(0, lsblk, string.Empty),
+            ("uname", _) => new ProcessResult(0, "6.8.0-test\n", string.Empty),
+            ("apt", _) => new ProcessResult(0, "Listing...\n", string.Empty),
+            ("realm", _) => new ProcessResult(1, string.Empty, "not found"),
+            ("hostname", _) => new ProcessResult(0, string.Empty, string.Empty),
+            ("systemctl", string value) when value.Contains("falcon-sensor") =>
+                new ProcessResult(0, "loaded\nactive\n", string.Empty),
+            ("systemctl", string value) when value.Contains("cbagentd") =>
+                new ProcessResult(0, "loaded\ninactive\n", string.Empty),
+            ("systemctl", _) => new ProcessResult(0, "not-found\ninactive\n", string.Empty),
+            ("hostnamectl", _) => new ProcessResult(0,
+                """{"HardwareVendor":"Dell Inc.","HardwareModel":"Latitude 5520","HardwareSerial":"LINUXSERIAL"}""",
+                string.Empty),
+            ("dpkg-query", _) => new ProcessResult(0, "bash\t5.2.21-2\n", string.Empty),
+            ("docker", _) => new ProcessResult(1, string.Empty, "unavailable"),
+            _ => Missing(file)
+        });
+
+        DeviceInventory inventory =
+            await new LinuxInventoryCollector(runner, TimeProvider.System, DefaultOptions)
+                .CollectAsync(CancellationToken.None);
+
+        Assert.Contains(inventory.Antivirus.Value!,
+            item => item.Name == "CrowdStrike Falcon" && item.Enabled == true);
+        Assert.Contains(inventory.Antivirus.Value!,
+            item => item.Name == "Carbon Black" && item.Enabled == false &&
+                    item.Detail == "cbagentd.service");
+        Assert.Equal(2, inventory.Antivirus.Value!.Count);
+    }
+
+    [Fact]
+    public async Task Linux_collector_falls_back_to_aws_ebs_encryption_when_no_luks()
+    {
+        string lsblk = await ReadFixtureAsync("linux-lsblk-no-luks.txt");
+        string lsblkJson = await ReadFixtureAsync("linux-lsblk-no-luks.json");
+        string describeVolumes = await ReadFixtureAsync("aws-describe-volumes.xml");
+        FakeHttpMessageHandler http = new((request, _) =>
+        {
+            string path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Put && path.EndsWith("/latest/api/token", StringComparison.Ordinal))
+            {
+                return TextResponse("imds-token");
+            }
+
+            if (path.Contains("instance-identity/document", StringComparison.Ordinal))
+            {
+                return TextResponse(
+                    """{"region":"us-east-1","instanceId":"i-1234567890abcdef0"}""");
+            }
+
+            if (path.EndsWith("/latest/meta-data/iam/security-credentials/", StringComparison.Ordinal))
+            {
+                return TextResponse("TestRole\n");
+            }
+
+            if (path.Contains("/security-credentials/TestRole", StringComparison.Ordinal))
+            {
+                return TextResponse(
+                    """{"AccessKeyId":"AKIATEST","SecretAccessKey":"secret","Token":"session"}""");
+            }
+
+            if (request.RequestUri.Host.StartsWith("ec2.", StringComparison.Ordinal) &&
+                request.RequestUri.Query.Contains("DescribeVolumes", StringComparison.Ordinal))
+            {
+                return TextResponse(describeVolumes, "application/xml");
+            }
+
+            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+        });
+
+        using HttpClient client = new(http) { Timeout = TimeSpan.FromSeconds(2) };
+        CloudDiskEncryptionProbe probe = new(client, TimeProvider.System);
+        FakeProcessRunner runner = LinuxRunnerWithoutLuks(lsblk, lsblkJson);
+
+        DeviceInventory inventory =
+            await new LinuxInventoryCollector(runner, TimeProvider.System, DefaultOptions, probe)
+                .CollectAsync(CancellationToken.None);
+
+        Assert.Equal(ProbeStatus.Available, inventory.DiskEncryption.Status);
+        Assert.Equal(2, inventory.DiskEncryption.Value!.Count);
+        Assert.Contains(inventory.DiskEncryption.Value!,
+            volume => volume is { Technology: "AWS EBS", State: "encrypted", Volume: "/dev/xvda" });
+        Assert.Contains(inventory.DiskEncryption.Value!,
+            volume => volume is { Technology: "AWS EBS", State: "not encrypted", Volume: "/dev/xvdb" });
+        Assert.DoesNotContain(inventory.DiskEncryption.Value!,
+            volume => volume.Technology == "LUKS/dm-crypt");
+    }
+
+    [Fact]
+    public async Task Cloud_probe_reports_azure_and_gcp_disk_encryption()
+    {
+        string azure = await ReadFixtureAsync("azure-storage-profile.json");
+        string gcp = await ReadFixtureAsync("gcp-disks.json");
+
+        FakeHttpMessageHandler azureHandler = new((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath.Contains("storageProfile", StringComparison.Ordinal))
+            {
+                return TextResponse(azure);
+            }
+
+            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+        });
+        using HttpClient azureClient = new(azureHandler);
+        IReadOnlyList<EncryptionVolume>? azureVolumes =
+            await new CloudDiskEncryptionProbe(azureClient, TimeProvider.System)
+                .TryCollectAsync(CancellationToken.None);
+        Assert.NotNull(azureVolumes);
+        Assert.Contains(azureVolumes,
+            volume => volume is { Technology: "Azure Disk (SSE)", State: "encrypted", Volume: "osdisk-linux" });
+        Assert.Contains(azureVolumes,
+            volume => volume is { Technology: "Azure Disk (ADE)", State: "encrypted", Volume: "datadisk-1" });
+
+        FakeHttpMessageHandler gcpHandler = new((request, _) =>
+        {
+            if (request.Headers.Contains("Metadata-Flavor") &&
+                request.RequestUri!.AbsolutePath.Contains("/instance/disks/", StringComparison.Ordinal))
+            {
+                return TextResponse(gcp);
+            }
+
+            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+        });
+        using HttpClient gcpClient = new(gcpHandler);
+        IReadOnlyList<EncryptionVolume>? gcpVolumes =
+            await new CloudDiskEncryptionProbe(gcpClient, TimeProvider.System)
+                .TryCollectAsync(CancellationToken.None);
+        Assert.NotNull(gcpVolumes);
+        Assert.Contains(gcpVolumes, volume => volume.Volume == "boot" && volume.Technology == "GCP Persistent Disk");
+        Assert.Contains(gcpVolumes, volume => volume.Volume == "persistent-disk-1");
+        Assert.DoesNotContain(gcpVolumes, volume => volume.Volume == "local-ssd-0");
+    }
+
+    [Fact]
     public async Task Mac_collector_parses_hardware_filevault_workspace_and_xprotect()
     {
         string hardware = await ReadFixtureAsync("macos-hardware.json");
@@ -216,6 +358,31 @@ public sealed class CollectorTests
             component => component.Name == "com.example.app" && component.Version == "2.1.0");
     }
 
+    private static FakeProcessRunner LinuxRunnerWithoutLuks(string lsblk, string lsblkJson) =>
+        new((file, arguments) => (file, string.Join(' ', arguments)) switch
+        {
+            ("lsblk", string value) when value.Contains("-J", StringComparison.Ordinal) =>
+                new ProcessResult(0, lsblkJson, string.Empty),
+            ("lsblk", _) => new ProcessResult(0, lsblk, string.Empty),
+            ("uname", _) => new ProcessResult(0, "6.8.0-test\n", string.Empty),
+            ("apt", _) => new ProcessResult(0, "Listing...\n", string.Empty),
+            ("realm", _) => new ProcessResult(1, string.Empty, "not found"),
+            ("hostname", _) => new ProcessResult(0, string.Empty, string.Empty),
+            ("systemctl", _) => new ProcessResult(0, "not-found\ninactive\n", string.Empty),
+            ("hostnamectl", _) => new ProcessResult(0,
+                """{"HardwareVendor":"Amazon EC2","HardwareModel":"t3.micro","HardwareSerial":"ec2-serial"}""",
+                string.Empty),
+            ("dpkg-query", _) => new ProcessResult(0, "bash\t5.2.21-2\n", string.Empty),
+            ("docker", _) => new ProcessResult(1, string.Empty, "unavailable"),
+            _ => Missing(file)
+        });
+
+    private static HttpResponseMessage TextResponse(string content, string mediaType = "application/json") =>
+        new(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent(content, System.Text.Encoding.UTF8, mediaType)
+        };
+
     private static async Task<string> ReadFixtureAsync(string name) =>
         await File.ReadAllTextAsync(
             Path.Combine(AppContext.BaseDirectory, "Fixtures", name),
@@ -233,5 +400,14 @@ public sealed class CollectorTests
             TimeSpan timeout,
             CancellationToken cancellationToken) =>
             Task.FromResult(handler(fileName, arguments.ToArray()));
+    }
+
+    private sealed class FakeHttpMessageHandler(
+        Func<HttpRequestMessage, CancellationToken, HttpResponseMessage> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(handler(request, cancellationToken));
     }
 }

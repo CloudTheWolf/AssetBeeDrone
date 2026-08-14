@@ -282,9 +282,15 @@ sudo deploy/macos/uninstall.sh
 - Windows Security Center inventory is normally available on client Windows,
   not Windows Server. BitLocker requires the BitLocker PowerShell module and an
   elevated service account.
-- Linux has no universal antivirus registry. The initial detector recognizes
-  ClamAV, Defender for Endpoint, CrowdStrike, SentinelOne, and Sophos systemd
-  services and can be extended in the collector.
+- Linux has no universal antivirus registry. The detector recognizes common
+  antivirus/EDR products via systemd units and install paths (ClamAV, Defender
+  for Endpoint, CrowdStrike, SentinelOne, Sophos, Carbon Black, Cortex XDR,
+  Trellix/McAfee, Trend Micro, ESET, Bitdefender, Qualys, Tanium, Kaspersky,
+  WatchGuard / Panda Security).
+  When local LUKS/dm-crypt is absent, Linux falls back to AWS/GCP/Azure metadata:
+  AWS uses IMDSv2 at `169.254.169.254` plus `ec2:DescribeVolumes` with the
+  instance role; Azure uses IMDS `storageProfile`; GCP treats persistent disks
+  as encrypted at rest when instance metadata is reachable.
 - FileVault reports startup-volume state. macOS third-party products are
   identified from standard application locations.
 - Some VM/container firmware exposes blank or placeholder serial numbers.

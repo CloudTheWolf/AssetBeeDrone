@@ -47,6 +47,22 @@ builder.Services.AddHttpClient<IInventoryReporter, HttpInventoryReporter>((servi
     client.Timeout = options.RequestTimeout;
     client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetBee-Drone/1.0");
 });
+builder.Services.AddHttpClient(CloudDiskEncryptionProbe.HttpClientName, client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(2);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetBee-Drone/1.0");
+}).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+{
+    UseProxy = false,
+    ConnectTimeout = TimeSpan.FromSeconds(1)
+});
+builder.Services.AddSingleton<CloudDiskEncryptionProbe>(services =>
+{
+    IHttpClientFactory factory = services.GetRequiredService<IHttpClientFactory>();
+    return new CloudDiskEncryptionProbe(
+        factory.CreateClient(CloudDiskEncryptionProbe.HttpClientName),
+        services.GetRequiredService<TimeProvider>());
+});
 builder.Services.AddSingleton<InventoryWorker>();
 builder.Services.AddSingleton<IInventorySyncController>(services =>
     services.GetRequiredService<InventoryWorker>());

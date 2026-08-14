@@ -11,11 +11,13 @@ namespace AssetBeeDrone.Collectors.Linux;
 public sealed partial class LinuxInventoryCollector(
     IProcessRunner processRunner,
     TimeProvider timeProvider,
-    IOptions<DroneOptions> options) : InventoryCollectorBase, IDeviceInventoryCollector
+    IOptions<DroneOptions> options,
+    CloudDiskEncryptionProbe? cloudDiskEncryptionProbe = null) : InventoryCollectorBase, IDeviceInventoryCollector
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan UpdateProbeTimeout = TimeSpan.FromSeconds(45);
     private readonly DroneOptions _options = options.Value;
+    private readonly CloudDiskEncryptionProbe? _cloudDiskEncryptionProbe = cloudDiskEncryptionProbe;
 
     public async Task<DeviceInventory> CollectAsync(CancellationToken cancellationToken)
     {
@@ -685,10 +687,25 @@ public sealed partial class LinuxInventoryCollector(
             }
         }
 
+        if (encrypted.Count > 0)
+        {
+            return ProbeValue<IReadOnlyList<EncryptionVolume>>.Available(encrypted);
+        }
+
+        if (_cloudDiskEncryptionProbe is not null)
+        {
+            IReadOnlyList<EncryptionVolume>? cloud =
+                await _cloudDiskEncryptionProbe.TryCollectAsync(cancellationToken);
+            if (cloud is { Count: > 0 })
+            {
+                return ProbeValue<IReadOnlyList<EncryptionVolume>>.Available(cloud);
+            }
+        }
+
         return new ProbeValue<IReadOnlyList<EncryptionVolume>>(
             ProbeStatus.Available,
             encrypted,
-            encrypted.Count == 0 ? "No LUKS/dm-crypt volumes were detected." : null);
+            "No LUKS/dm-crypt volumes were detected and cloud disk encryption metadata was unavailable.");
     }
 
     private async Task<ProbeValue<DomainWorkspaceInfo>> CollectDomainAsync(
@@ -747,10 +764,25 @@ public sealed partial class LinuxInventoryCollector(
             ("Microsoft Defender for Endpoint", "mdatp.service"),
             ("CrowdStrike Falcon", "falcon-sensor.service"),
             ("SentinelOne", "sentinelone.service"),
-            ("Sophos", "sav-protect.service")
+            ("Sophos", "sav-protect.service"),
+            ("Carbon Black", "cbagentd.service"),
+            ("Cortex XDR", "traps_pmd.service"),
+            ("Cortex XDR", "cortex-agent.service"),
+            ("Trellix Endpoint Security", "mfetpd.service"),
+            ("McAfee Agent", "mcs.service"),
+            ("Trend Micro Deep Security", "ds_agent.service"),
+            ("ESET File Security", "eset_esets.service"),
+            ("ESET Endpoint Antivirus", "eset-eea.service"),
+            ("Bitdefender", "bdsec.service"),
+            ("Qualys Cloud Agent", "qualys-cloud-agent.service"),
+            ("Tanium Client", "taniumclient.service"),
+            ("Kaspersky Endpoint Security", "kesl.service"),
+            ("WatchGuard EPDR / Panda Security", "management-agent.service"),
+            ("WatchGuard EPDR / Panda Security", "protection-agent.service")
         ];
 
         List<AntivirusInfo> products = [];
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
         foreach ((string name, string service) in detectors)
         {
             ProcessResult result = await processRunner.RunAsync(
@@ -760,11 +792,44 @@ public sealed partial class LinuxInventoryCollector(
                 cancellationToken);
             string[] states = result.StandardOutput.Split('\n',
                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (states.Length >= 2 && states[0] == "loaded")
+            if (states.Length >= 2 && states[0] == "loaded" && seen.Add(name))
             {
                 string state = states[1];
                 bool enabled = state == "active";
                 products.Add(new AntivirusInfo(name, state, enabled, Detail: service));
+            }
+        }
+
+        (string Name, string Path)[] installPaths =
+        [
+            ("ClamAV", "/usr/sbin/clamd"),
+            ("Microsoft Defender for Endpoint", "/opt/microsoft/mdatp"),
+            ("CrowdStrike Falcon", "/opt/CrowdStrike/falcon-sensor"),
+            ("CrowdStrike Falcon", "/opt/crowdstrike"),
+            ("SentinelOne", "/opt/sentinelone"),
+            ("Sophos", "/opt/sophos"),
+            ("Carbon Black", "/opt/carbonblack"),
+            ("Cortex XDR", "/opt/traps"),
+            ("Trend Micro Deep Security", "/opt/ds_agent"),
+            ("Qualys Cloud Agent", "/usr/local/qualys"),
+            ("Tanium Client", "/opt/Tanium/TaniumClient"),
+            ("Kaspersky Endpoint Security", "/opt/kaspersky"),
+            ("WatchGuard / Panda Security", "/usr/local/management-agent"),
+            ("WatchGuard / Panda Security", "/opt/panda-security"),
+            ("WatchGuard / Panda Security", "/etc/endpoint-security")
+        ];
+
+        foreach ((string name, string path) in installPaths)
+        {
+            if (seen.Contains(name))
+            {
+                continue;
+            }
+
+            if (File.Exists(path) || Directory.Exists(path))
+            {
+                seen.Add(name);
+                products.Add(new AntivirusInfo(name, "installed", Detail: path));
             }
         }
 
