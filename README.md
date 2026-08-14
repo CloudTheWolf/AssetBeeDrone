@@ -32,7 +32,7 @@ underscores:
 
 ```text
 Drone__Endpoint=https://inventory.example.com/api/v1/inventory
-Drone__CollectionIntervalMinutes=360
+Drone__CollectionIntervalMinutes=3600
 Drone__RequestTimeoutSeconds=30
 Drone__MaxRetryAttempts=3
 Drone__BearerToken=secret

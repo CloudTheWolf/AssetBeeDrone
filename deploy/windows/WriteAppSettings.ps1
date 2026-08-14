@@ -132,7 +132,7 @@ if (-not (Test-Path -LiteralPath $InstallDir)) {
 $settings = @{
     Drone = @{
         Endpoint = $endpointUri.AbsoluteUri
-        CollectionIntervalMinutes = 360
+        CollectionIntervalMinutes = 3600
         RequestTimeoutSeconds = 30
         MaxRetryAttempts = 3
         BearerToken = if ($hasBearer) { $BearerToken } else { $null }

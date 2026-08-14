@@ -73,7 +73,7 @@ if [ -f "$payload/bin/appsettings.json" ]; then
 {
   "Drone": {
     "Endpoint": "https://inventory.example.com/api/v1/inventory",
-    "CollectionIntervalMinutes": 360,
+    "CollectionIntervalMinutes": 3600,
     "RequestTimeoutSeconds": 30,
     "MaxRetryAttempts": 3,
     "BearerToken": null,

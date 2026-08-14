@@ -10,7 +10,7 @@ public sealed class DroneOptions
     public Uri Endpoint { get; set; } = new("https://localhost:8000/api/v1/inventory");
 
     [Range(1, 10080)]
-    public int CollectionIntervalMinutes { get; set; } = 360;
+    public int CollectionIntervalMinutes { get; set; } = 3600;
 
     [Range(5, 300)]
     public int RequestTimeoutSeconds { get; set; } = 30;

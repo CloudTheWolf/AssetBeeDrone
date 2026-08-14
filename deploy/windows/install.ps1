@@ -35,7 +35,7 @@ Copy-Item -Path (Join-Path $PublishDirectory '*') -Destination $Destination -Rec
 $settings = @{
     Drone = @{
         Endpoint = $Endpoint.AbsoluteUri
-        CollectionIntervalMinutes = 360
+        CollectionIntervalMinutes = 3600
         RequestTimeoutSeconds = 30
         MaxRetryAttempts = 3
         BearerToken = if ($BearerToken) { $BearerToken } else { $null }
