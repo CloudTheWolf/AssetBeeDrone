@@ -90,8 +90,8 @@
 						Order="1" />
 
 					<Publish
-						Property="UNINSTALL_UI"
-						Value="basic"
+						Property="UNINSTALL_MSIUI"
+						Value="/qb"
 						Order="2" />
 
 					<Publish
@@ -309,33 +309,27 @@
 						Condition="NOT ENDPOINT OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 					<Publish
-						Event="DoAction"
-						Value="SavePendingSettings"
-						Order="5"
-						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
-
-					<Publish
 						Property="UNINSTALL_PRODUCTS"
 						Value="[LEGACY_UPGRADE_DETECTED]"
-						Order="6"
+						Order="5"
 						Condition="LEGACY_UPGRADE_DETECTED AND ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 					<Publish
-						Property="UNINSTALL_UI"
-						Value="quiet"
-						Order="7"
+						Property="UNINSTALL_MSIUI"
+						Value="/qn"
+						Order="6"
 						Condition="LEGACY_UPGRADE_DETECTED AND ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 					<Publish
 						Event="DoAction"
 						Value="UninstallRelatedProducts"
-						Order="8"
+						Order="7"
 						Condition="LEGACY_UPGRADE_DETECTED AND ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 					<Publish
 						Event="NewDialog"
 						Value="InstallDirDlg"
-						Order="9"
+						Order="8"
 						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 				</Control>
@@ -414,25 +408,17 @@
 			<Publish
 				Dialog="WelcomeDlg"
 				Control="Next"
-				Event="DoAction"
-				Value="SavePendingSettings"
+				Property="UNINSTALL_PRODUCTS"
+				Value="[LEGACY_UPGRADE_DETECTED]"
 				Order="4"
 				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 			<Publish
 				Dialog="WelcomeDlg"
 				Control="Next"
-				Property="UNINSTALL_PRODUCTS"
-				Value="[LEGACY_UPGRADE_DETECTED]"
+				Property="UNINSTALL_MSIUI"
+				Value="/qn"
 				Order="5"
-				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
-
-			<Publish
-				Dialog="WelcomeDlg"
-				Control="Next"
-				Property="UNINSTALL_UI"
-				Value="quiet"
-				Order="6"
 				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 			<Publish
@@ -440,7 +426,7 @@
 				Control="Next"
 				Event="DoAction"
 				Value="UninstallRelatedProducts"
-				Order="7"
+				Order="6"
 				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 			<Publish
@@ -448,7 +434,7 @@
 				Control="Next"
 				Event="NewDialog"
 				Value="VerifyReadyDlg"
-				Order="8"
+				Order="7"
 				Condition="NOT Installed AND WIX_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 			<!-- An upgrade without reusable settings is configured through the UI. -->
@@ -457,7 +443,7 @@
 				Control="Next"
 				Event="NewDialog"
 				Value="ConfigDlg"
-				Order="9"
+				Order="8"
 				Condition="NOT Installed AND WIX_UPGRADE_DETECTED AND (NOT ENDPOINT OR NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN)))" />
 
 			<!-- Fresh install -->

@@ -162,9 +162,9 @@ Native AOT publish and native package builds must run on the matching OS family
 Artifacts land in `dist/`: portable archives (`.zip` / `.tar.gz`) plus native
 packages (`.msi`, `.deb`, `.rpm`, `.pkg`).
 
-Windows MSI custom actions use a native helper EXE (no PowerShell /
-`EncodedCommand` / `certutil` script drops). For production SmartScreen
-reputation, still Authenticode-sign:
+Windows MSI custom actions run an installed helper under Program Files (never a
+`%TEMP%\*.tmp` Binary extract, which AV often blocks as Exploit.gen). For
+production SmartScreen reputation, still Authenticode-sign:
 
 ```powershell
 .\deploy\windows\build-msi.ps1 `

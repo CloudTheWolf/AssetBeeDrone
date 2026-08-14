@@ -71,9 +71,9 @@
 		<Property Id="ENDPOINT" Secure="yes" />
 		<Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
 		<Property Id="APIKEY" Secure="yes" Hidden="yes" />
-		<Property Id="PENDINGCONFIGPATH" Secure="yes" Hidden="yes" />
 		<Property Id="UNINSTALL_PRODUCTS" Secure="yes" Hidden="yes" />
-		<Property Id="UNINSTALL_UI" Secure="yes" Hidden="yes" Value="quiet" />
+		<!-- /qn or /qb for legacy/same-version uninstall via msiexec -->
+		<Property Id="UNINSTALL_MSIUI" Secure="yes" Hidden="yes" Value="/qn" />
 
 		<!-- Existing configuration -->
 		<Property Id="BT_EXISTING" Secure="yes" Hidden="yes" />
@@ -155,11 +155,6 @@
 			</Directory>
 
 		</StandardDirectory>
-
-		<!-- Native helper for MSI custom actions (no PowerShell dropper chain). -->
-		<Binary
-			Id="AssetBeeMsiHelper"
-			SourceFile="$(var.HelperPath)" />
 
 		<ComponentGroup
 			Id="ProductComponents"
@@ -257,39 +252,33 @@
 
 			</Component>
 
+			<!--
+				Installed helper (proper path/name). Never use Binary table EXE CAs:
+				MSI extracts those to %TEMP%\*.tmp which AV routinely blocks as W32/Exploit.gen.
+			-->
+			<Component
+				Id="MsiHelperBinary"
+				Guid="F5A6B7C8-D9E0-1234-5678-9ABCDEF01234">
+
+				<File
+					Id="MsiHelperExe"
+					Source="$(var.PublishDir)\AssetBee.Drone.MsiHelper.exe"
+					KeyPath="yes" />
+
+			</Component>
+
 		</ComponentGroup>
 
 		<UIRef Id="AssetBeeDroneUI" />
 
-		<!-- Seed registry from existing appsettings.json before AppSearch. -->
-		<CustomAction
-			Id="LoadExistingSettings"
-			BinaryRef="AssetBeeMsiHelper"
-			ExeCommand="load-existing"
-			Execute="immediate"
-			Impersonate="yes"
-			Return="ignore" />
-
-		<CustomAction
-			Id="PreserveExistingSettings"
-			BinaryRef="AssetBeeMsiHelper"
-			ExeCommand="preserve"
-			Execute="immediate"
-			Impersonate="no"
-			Return="ignore" />
-
-		<CustomAction
-			Id="SavePendingSettings"
-			BinaryRef="AssetBeeMsiHelper"
-			ExeCommand="save-pending --pending=&quot;[PENDINGCONFIGPATH]&quot; --endpoint=&quot;[ENDPOINT]&quot; --bearer=&quot;[BEARERTOKEN]&quot; --api=&quot;[APIKEY]&quot;"
-			Execute="immediate"
-			Impersonate="yes"
-			Return="check" />
-
+		<!--
+			Legacy / same-version uninstall via system msiexec (no temp-extracted helper).
+			UNINSTALL_PRODUCTS is a product code; UNINSTALL_MSIUI is /qn or /qb.
+		-->
 		<CustomAction
 			Id="UninstallRelatedProducts"
-			BinaryRef="AssetBeeMsiHelper"
-			ExeCommand="uninstall-related --products=&quot;[UNINSTALL_PRODUCTS]&quot; --endpoint=&quot;[ENDPOINT]&quot; --ui=&quot;[UNINSTALL_UI]&quot;"
+			Directory="System64Folder"
+			ExeCommand="msiexec.exe /x [UNINSTALL_PRODUCTS] [UNINSTALL_MSIUI] /norestart ENDPOINT=&quot;[ENDPOINT]&quot;"
 			Execute="immediate"
 			Impersonate="no"
 			Return="check" />
@@ -341,27 +330,11 @@
 			Property="BEARERTOKEN"
 			Value="[BT_EXISTING]" />
 
-		<SetProperty
-			Id="PENDINGCONFIGPATH"
-			Action="SetPendingConfigPathUI"
-			Sequence="ui"
-			Before="LoadExistingSettings"
-			Condition="NOT REMOVE"
-			Value="[WindowsFolder]Temp\AssetBee-Drone-[ProductCode]-pending.json" />
-
-		<SetProperty
-			Id="PENDINGCONFIGPATH"
-			Action="SetPendingConfigPathExec"
-			Sequence="execute"
-			Before="LoadExistingSettings"
-			Condition="NOT REMOVE AND NOT PENDINGCONFIGPATH"
-			Value="[WindowsFolder]Temp\AssetBee-Drone-[ProductCode]-pending.json" />
-
-		<!-- Deferred config write: properties are formatted when the action is scheduled. -->
+		<!-- Runs from Program Files after InstallFiles — never from %TEMP%. -->
 		<CustomAction
 			Id="WriteAppSettings"
-			BinaryRef="AssetBeeMsiHelper"
-			ExeCommand="write-settings --endpoint=&quot;[ENDPOINT]&quot; --bearer=&quot;[BEARERTOKEN]&quot; --api=&quot;[APIKEY]&quot; --pending=&quot;[PENDINGCONFIGPATH]&quot; --install=&quot;[INSTALLFOLDER].&quot;"
+			FileRef="MsiHelperExe"
+			ExeCommand="write-settings --endpoint=&quot;[ENDPOINT]&quot; --bearer=&quot;[BEARERTOKEN]&quot; --api=&quot;[APIKEY]&quot; --install=&quot;[INSTALLFOLDER].&quot;"
 			Execute="deferred"
 			Impersonate="no"
 			HideTarget="yes"
@@ -376,11 +349,6 @@
 			Return="asyncNoWait" />
 
 		<InstallUISequence>
-
-			<Custom
-				Action="LoadExistingSettings"
-				Before="AppSearch"
-				Condition="NOT REMOVE" />
 
 			<Custom
 				Action="SetEndpointFromHklm"
@@ -432,11 +400,6 @@
 		<InstallExecuteSequence>
 
 			<Custom
-				Action="LoadExistingSettings"
-				Before="AppSearch"
-				Condition="NOT REMOVE" />
-
-			<Custom
 				Action="SetEndpointFromHklm"
 				After="AppSearch"
 				Condition="NOT ENDPOINT AND EP_HKLM" />
@@ -481,17 +444,16 @@
 				After="RestoreApiKeyOnly"
 				Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT REMOVE" />
 
-			<Custom
-				Action="PreserveExistingSettings"
-				After="InstallInitialize"
-				Condition="(WIX_UPGRADE_DETECTED OR SAME_VERSION_PRODUCT) AND NOT REMOVE" />
-
+			<!--
+				AppSearch already captured endpoint/secrets into session properties before
+				RemoveExistingProducts; no temp helper / preserve script is required.
+			-->
 			<RemoveExistingProducts
-				After="PreserveExistingSettings" />
+				After="InstallInitialize" />
 
 			<Custom
 				Action="WriteAppSettings"
-				Before="StartServices"
+				After="InstallFiles"
 				Condition="NOT REMOVE" />
 
 			<Custom

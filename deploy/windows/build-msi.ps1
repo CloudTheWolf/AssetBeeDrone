@@ -66,6 +66,9 @@ if (-not (Test-Path -LiteralPath $helper)) {
     throw "MSI helper binary not found after publish: $helper"
 }
 
+# Install as a normal Program Files binary (File table), never Binary-table temp extract.
+Copy-Item -LiteralPath $helper -Destination (Join-Path $PublishDirectory 'AssetBee.Drone.MsiHelper.exe') -Force
+
 $wixVersion = '7.0.0'
 $wixEulaId = 'wix7'
 $wixToolDir = Join-Path $env:USERPROFILE '.dotnet\tools'
@@ -152,7 +155,10 @@ function Invoke-AuthenticodeSign {
 
 if ($SignThumbprint) {
     # Sign payload EXEs before they are embedded in the MSI.
-    Invoke-AuthenticodeSign -Paths @($exe, $tray, $helper)
+    Invoke-AuthenticodeSign -Paths @(
+        $exe,
+        $tray,
+        (Join-Path $PublishDirectory 'AssetBee.Drone.MsiHelper.exe'))
 } else {
     Write-Host 'Skipping Authenticode signing (pass -SignThumbprint to enable).'
 }
@@ -167,7 +173,6 @@ if ($SignThumbprint) {
     -d "Version=$Version" `
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `
-    -d "HelperPath=$helper" `
     -arch x64 `
     -o $outputMsi
 

@@ -31,9 +31,39 @@ internal static class Program
         }
         catch (Exception ex)
         {
+            TryWriteCrashLog(ex);
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    private static void TryWriteCrashLog(Exception ex)
+    {
+        try
+        {
+            string path = Path.Combine(Path.GetTempPath(), "AssetBee-MsiHelper.log");
+            File.AppendAllText(path, $"[{DateTime.UtcNow:O}] {ex}\n");
+        }
+        catch
+        {
+            // Best-effort diagnostics only.
+        }
+    }
+
+    private static void WritePendingJson(string path, string endpoint, string bearer, string api)
+    {
+        // Utf8JsonWriter is AOT-safe; JsonSerializer.Serialize(Dictionary) is not under Native AOT.
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("Endpoint", endpoint);
+            writer.WriteString("BearerToken", bearer);
+            writer.WriteString("ApiKey", api);
+            writer.WriteEndObject();
+        }
+
+        File.WriteAllBytes(path, stream.ToArray());
     }
 
     private static Dictionary<string, string> ParseOptions(ReadOnlySpan<string> args)
@@ -92,14 +122,7 @@ internal static class Program
             Directory.CreateDirectory(dir);
         }
 
-        var payload = new Dictionary<string, string?>
-        {
-            ["Endpoint"] = endpoint,
-            ["BearerToken"] = bearer,
-            ["ApiKey"] = api,
-        };
-
-        File.WriteAllText(pendingPath, JsonSerializer.Serialize(payload));
+        WritePendingJson(pendingPath, endpoint, bearer, api);
         return 0;
     }
 
@@ -148,14 +171,7 @@ internal static class Program
             "AssetBee", "Drone");
         Directory.CreateDirectory(dir);
 
-        var payload = new Dictionary<string, string?>
-        {
-            ["Endpoint"] = endpoint,
-            ["BearerToken"] = bearer,
-            ["ApiKey"] = apiKey,
-        };
-
-        File.WriteAllText(Path.Combine(dir, "msi-pending.json"), JsonSerializer.Serialize(payload));
+        WritePendingJson(Path.Combine(dir, "msi-pending.json"), endpoint, bearer, apiKey);
         return 0;
     }
 
