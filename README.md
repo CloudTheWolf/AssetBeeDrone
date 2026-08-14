@@ -132,7 +132,20 @@ Package versions are computed automatically (override with `VERSION`):
 
 Pushing to `main` runs `.github/workflows/release-packages.yml`, which publishes
 Native AOT builds and uploads packages as workflow artifacts. Pushing a `v*` tag
-also creates a GitHub Release from those artifacts.
+also creates a GitHub Release from those artifacts. Release assets are
+**Sigstore/Cosign keyless-signed** (OIDC via GitHub Actions); each package ships
+with a `.sigstore.json` bundle plus a signed `SHA256SUMS`.
+
+Verify a downloaded asset (replace `OWNER/REPO` and the tag):
+
+```sh
+cosign verify-blob \
+  --bundle AssetBee.Drone-<version>-win-x64.msi.sigstore.json \
+  --certificate-identity-regexp \
+    'https://github.com/OWNER/REPO/\.github/workflows/release-packages\.yml@refs/tags/v.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  AssetBee.Drone-<version>-win-x64.msi
+```
 
 Native AOT publish and native package builds must run on the matching OS family
 (or via that workflow). After publishing a RID:
@@ -149,8 +162,8 @@ Native AOT publish and native package builds must run on the matching OS family
 Artifacts land in `dist/`: portable archives (`.zip` / `.tar.gz`) plus native
 packages (`.msi`, `.deb`, `.rpm`, `.pkg`).
 
-Windows MSI builds no longer use `certutil` script drops (a common AV/PUP
-heuristic). For production, Authenticode-sign the payload EXEs and MSI:
+Sigstore attests build provenance; it does **not** replace Windows Authenticode /
+SmartScreen. For production MSI reputation, still Authenticode-sign:
 
 ```powershell
 .\deploy\windows\build-msi.ps1 `
@@ -158,9 +171,8 @@ heuristic). For production, Authenticode-sign the payload EXEs and MSI:
   -SignThumbprint <cert-sha1-thumbprint>
 ```
 
-Unsigned packages still trigger SmartScreen / Gatekeeper until signed (and
-notarized on macOS). After signing, submit false-positive reports to major AV
-vendors so reputation can catch up.
+Unsigned Windows/macOS packages still trigger SmartScreen / Gatekeeper until
+Authenticode-signed (and notarized on macOS).
 
 ## Install
 
