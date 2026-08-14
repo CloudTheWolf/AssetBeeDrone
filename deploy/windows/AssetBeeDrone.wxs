@@ -281,7 +281,7 @@
 		<CustomAction
 			Id="SavePendingSettings"
 			BinaryRef="AssetBeeMsiHelper"
-			ExeCommand="save-pending --pending &quot;[PENDINGCONFIGPATH]&quot; --endpoint &quot;[ENDPOINT]&quot; --bearer &quot;[BEARERTOKEN]&quot; --api &quot;[APIKEY]&quot;"
+			ExeCommand="save-pending --pending=&quot;[PENDINGCONFIGPATH]&quot; --endpoint=&quot;[ENDPOINT]&quot; --bearer=&quot;[BEARERTOKEN]&quot; --api=&quot;[APIKEY]&quot;"
 			Execute="immediate"
 			Impersonate="yes"
 			Return="check" />
@@ -289,7 +289,7 @@
 		<CustomAction
 			Id="UninstallRelatedProducts"
 			BinaryRef="AssetBeeMsiHelper"
-			ExeCommand="uninstall-related --products &quot;[UNINSTALL_PRODUCTS]&quot; --endpoint &quot;[ENDPOINT]&quot; --ui &quot;[UNINSTALL_UI]&quot;"
+			ExeCommand="uninstall-related --products=&quot;[UNINSTALL_PRODUCTS]&quot; --endpoint=&quot;[ENDPOINT]&quot; --ui=&quot;[UNINSTALL_UI]&quot;"
 			Execute="immediate"
 			Impersonate="no"
 			Return="check" />
@@ -361,7 +361,7 @@
 		<CustomAction
 			Id="WriteAppSettings"
 			BinaryRef="AssetBeeMsiHelper"
-			ExeCommand="write-settings --endpoint &quot;[ENDPOINT]&quot; --bearer &quot;[BEARERTOKEN]&quot; --api &quot;[APIKEY]&quot; --pending &quot;[PENDINGCONFIGPATH]&quot; --install &quot;[INSTALLFOLDER].&quot;"
+			ExeCommand="write-settings --endpoint=&quot;[ENDPOINT]&quot; --bearer=&quot;[BEARERTOKEN]&quot; --api=&quot;[APIKEY]&quot; --pending=&quot;[PENDINGCONFIGPATH]&quot; --install=&quot;[INSTALLFOLDER].&quot;"
 			Execute="deferred"
 			Impersonate="no"
 			HideTarget="yes"

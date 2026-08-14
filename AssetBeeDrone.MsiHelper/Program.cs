@@ -38,25 +38,45 @@ internal static class Program
 
     private static Dictionary<string, string> ParseOptions(ReadOnlySpan<string> args)
     {
+        // MSI formats empty properties as --api "" which CreateProcess often drops,
+        // leaving a bare --api at end-of-argv. Also support --key=value (value may be empty).
         var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < args.Length; i++)
         {
-            string key = args[i];
-            if (!key.StartsWith("--", StringComparison.Ordinal))
+            string token = args[i];
+            if (!token.StartsWith("--", StringComparison.Ordinal))
             {
-                throw new ArgumentException($"Unexpected argument: {key}");
+                throw new ArgumentException($"Unexpected argument: {token}");
             }
 
-            key = key[2..];
-            if (i + 1 >= args.Length)
+            string body = token[2..];
+            int eq = body.IndexOf('=');
+            if (eq >= 0)
             {
-                throw new ArgumentException($"Missing value for --{key}");
+                options[body[..eq]] = Unquote(body[(eq + 1)..]);
+                continue;
             }
 
-            options[key] = args[++i];
+            if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                options[body] = "";
+                continue;
+            }
+
+            options[body] = Unquote(args[++i]);
         }
 
         return options;
+    }
+
+    private static string Unquote(string value)
+    {
+        if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
+        {
+            return value[1..^1];
+        }
+
+        return value;
     }
 
     private static int SavePending(Dictionary<string, string> options)
