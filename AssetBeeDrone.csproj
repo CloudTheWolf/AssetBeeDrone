@@ -11,7 +11,7 @@
     <RootNamespace>AssetBeeDrone</RootNamespace>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
-    <DefaultItemExcludes>$(DefaultItemExcludes);AssetBeeDrone.Tests/**;AssetBeeDrone.Tray/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);AssetBeeDrone.Tests/**;AssetBeeDrone.Tray/**;AssetBeeDrone.MsiHelper/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

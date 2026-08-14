@@ -20,8 +20,7 @@ public sealed partial class WindowsInventoryCollector(
     {
         Task<ProcessResult> inventoryTask = processRunner.RunAsync(
             "powershell.exe",
-            ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-Command", InventoryScript],
+            ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", InventoryScript],
             ProbeTimeout,
             cancellationToken);
         Task<ProbeValue<SbomInventory>> sbomTask = SbomCollector.CollectWindowsAsync(

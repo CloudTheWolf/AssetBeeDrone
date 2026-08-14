@@ -3,8 +3,6 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
-	<?include obj\ExtractScriptDefines.wxi ?>
-
 	<Package
 		Name="AssetBee Drone"
 		Manufacturer="AssetBee"
@@ -74,6 +72,8 @@
 		<Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
 		<Property Id="APIKEY" Secure="yes" Hidden="yes" />
 		<Property Id="PENDINGCONFIGPATH" Secure="yes" Hidden="yes" />
+		<Property Id="UNINSTALL_PRODUCTS" Secure="yes" Hidden="yes" />
+		<Property Id="UNINSTALL_UI" Secure="yes" Hidden="yes" Value="quiet" />
 
 		<!-- Existing configuration -->
 		<Property Id="BT_EXISTING" Secure="yes" Hidden="yes" />
@@ -155,6 +155,11 @@
 			</Directory>
 
 		</StandardDirectory>
+
+		<!-- Native helper for MSI custom actions (no PowerShell dropper chain). -->
+		<Binary
+			Id="AssetBeeMsiHelper"
+			SourceFile="$(var.HelperPath)" />
 
 		<ComponentGroup
 			Id="ProductComponents"
@@ -252,67 +257,39 @@
 
 			</Component>
 
-			<Component
-				Id="WriteAppSettingsScript"
-				Guid="C2D3E4F5-A6B7-8901-2345-6789ABCDEF01">
-
-				<File
-					Id="WriteAppSettingsPs1"
-					Source="$(var.SourceDir)\WriteAppSettings.ps1"
-					KeyPath="yes" />
-
-			</Component>
-
 		</ComponentGroup>
 
 		<UIRef Id="AssetBeeDroneUI" />
 
-		<!-- WiX Util custom actions -->
-
-		<CustomAction
-			Id="ExtractMsiScripts"
-			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-			DllEntry="WixQuietExec"
-			Execute="immediate"
-			Impersonate="yes"
-			Return="check" />
-
-		<CustomAction
-			Id="ExtractMsiScriptsElevated"
-			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-			DllEntry="WixQuietExec"
-			Execute="immediate"
-			Impersonate="no"
-			Return="check" />
-
+		<!-- Seed registry from existing appsettings.json before AppSearch. -->
 		<CustomAction
 			Id="LoadExistingSettings"
-			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-			DllEntry="WixQuietExec"
+			BinaryRef="AssetBeeMsiHelper"
+			ExeCommand="load-existing"
 			Execute="immediate"
 			Impersonate="yes"
 			Return="ignore" />
 
 		<CustomAction
 			Id="PreserveExistingSettings"
-			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-			DllEntry="WixQuietExec"
+			BinaryRef="AssetBeeMsiHelper"
+			ExeCommand="preserve"
 			Execute="immediate"
 			Impersonate="no"
 			Return="ignore" />
 
 		<CustomAction
 			Id="SavePendingSettings"
-			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-			DllEntry="WixQuietExec"
+			BinaryRef="AssetBeeMsiHelper"
+			ExeCommand="save-pending --pending &quot;[PENDINGCONFIGPATH]&quot; --endpoint &quot;[ENDPOINT]&quot; --bearer &quot;[BEARERTOKEN]&quot; --api &quot;[APIKEY]&quot;"
 			Execute="immediate"
 			Impersonate="yes"
 			Return="check" />
 
 		<CustomAction
 			Id="UninstallRelatedProducts"
-			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-			DllEntry="WixQuietExec"
+			BinaryRef="AssetBeeMsiHelper"
+			ExeCommand="uninstall-related --products &quot;[UNINSTALL_PRODUCTS]&quot; --endpoint &quot;[ENDPOINT]&quot; --ui &quot;[UNINSTALL_UI]&quot;"
 			Execute="immediate"
 			Impersonate="no"
 			Return="check" />
@@ -364,13 +341,11 @@
 			Property="BEARERTOKEN"
 			Value="[BT_EXISTING]" />
 
-		<!-- Existing helper-script SetProperty declarations stay unchanged here. -->
-
 		<SetProperty
 			Id="PENDINGCONFIGPATH"
 			Action="SetPendingConfigPathUI"
 			Sequence="ui"
-			Before="ExtractMsiScripts"
+			Before="LoadExistingSettings"
 			Condition="NOT REMOVE"
 			Value="[WindowsFolder]Temp\AssetBee-Drone-[ProductCode]-pending.json" />
 
@@ -378,80 +353,19 @@
 			Id="PENDINGCONFIGPATH"
 			Action="SetPendingConfigPathExec"
 			Sequence="execute"
-			Before="ExtractMsiScriptsElevated"
+			Before="LoadExistingSettings"
 			Condition="NOT REMOVE AND NOT PENDINGCONFIGPATH"
 			Value="[WindowsFolder]Temp\AssetBee-Drone-[ProductCode]-pending.json" />
 
-		<SetProperty
-			Id="WixQuietExecCmdLine"
-			Action="SetExtractMsiScriptsUI"
-			Sequence="ui"
-			Before="ExtractMsiScripts"
-			Condition="NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -EncodedCommand $(var.ExtractScriptsUiEncoded)" />
-
-		<SetProperty
-			Id="WixQuietExecCmdLine"
-			Action="SetExtractMsiScriptsElevated"
-			Sequence="execute"
-			Before="ExtractMsiScriptsElevated"
-			Condition="NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -EncodedCommand $(var.ExtractScriptsElevatedEncoded)" />
-
-		<SetProperty
-			Id="WixQuietExecCmdLine"
-			Action="SetLoadExistingSettingsUI"
-			Sequence="ui"
-			Before="LoadExistingSettings"
-			Condition="NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-LoadExisting.ps1&quot;" />
-
-		<SetProperty
-			Id="WixQuietExecCmdLine"
-			Action="SetLoadExistingSettingsExec"
-			Sequence="execute"
-			Before="LoadExistingSettings"
-			Condition="NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[CommonAppDataFolder]AssetBee\Drone\msi-scripts\AssetBee-LoadExisting.ps1&quot;" />
-
-		<SetProperty
-			Id="WixQuietExecCmdLine"
-			Action="SetPreserveExistingSettings"
-			Sequence="execute"
-			Before="PreserveExistingSettings"
-			Condition="(WIX_UPGRADE_DETECTED OR SAME_VERSION_PRODUCT) AND NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[CommonAppDataFolder]AssetBee\Drone\msi-scripts\AssetBee-PreserveSettings.ps1&quot;" />
-
-		<SetProperty
-			Id="WriteAppSettings"
-			Sequence="execute"
-			Before="WriteAppSettings"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]WriteAppSettings.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Install &quot;[INSTALLFOLDER].&quot;" />
-
+		<!-- Deferred config write: properties are formatted when the action is scheduled. -->
 		<CustomAction
 			Id="WriteAppSettings"
-			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-			DllEntry="WixQuietExec"
+			BinaryRef="AssetBeeMsiHelper"
+			ExeCommand="write-settings --endpoint &quot;[ENDPOINT]&quot; --bearer &quot;[BEARERTOKEN]&quot; --api &quot;[APIKEY]&quot; --pending &quot;[PENDINGCONFIGPATH]&quot; --install &quot;[INSTALLFOLDER].&quot;"
 			Execute="deferred"
 			Impersonate="no"
 			HideTarget="yes"
 			Return="check" />
-
-		<CustomAction
-			Id="CleanupMsiScripts"
-			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
-			DllEntry="WixQuietExec"
-			Execute="immediate"
-			Impersonate="no"
-			Return="ignore" />
-
-		<SetProperty
-			Id="WixQuietExecCmdLine"
-			Action="SetCleanupMsiScripts"
-			Sequence="execute"
-			Before="CleanupMsiScripts"
-			Condition="NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -Command &quot;Remove-Item -LiteralPath (Join-Path $env:ProgramData 'AssetBee\Drone\msi-scripts') -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath (Join-Path $env:TEMP 'AssetBee-SavePending.ps1'),(Join-Path $env:TEMP 'AssetBee-LoadExisting.ps1'),(Join-Path $env:TEMP 'AssetBee-PreserveSettings.ps1'),(Join-Path $env:TEMP 'AssetBee-UninstallRelated.ps1') -Force -ErrorAction SilentlyContinue; exit 0&quot;" />
 
 		<CustomAction
 			Id="LaunchTray"
@@ -464,7 +378,7 @@
 		<InstallUISequence>
 
 			<Custom
-				Action="ExtractMsiScripts"
+				Action="LoadExistingSettings"
 				Before="AppSearch"
 				Condition="NOT REMOVE" />
 
@@ -499,13 +413,8 @@
 				Condition="NOT AK_EXISTING AND AK_HKCU" />
 
 			<Custom
-				Action="LoadExistingSettings"
-				After="SetApiKeyExistingFromHkcu"
-				Condition="NOT REMOVE" />
-
-			<Custom
 				Action="RestoreBearerOnly"
-				After="LoadExistingSettings"
+				After="SetApiKeyExistingFromHkcu"
 				Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT AK_EXISTING AND NOT REMOVE" />
 
 			<Custom
@@ -523,7 +432,7 @@
 		<InstallExecuteSequence>
 
 			<Custom
-				Action="ExtractMsiScriptsElevated"
+				Action="LoadExistingSettings"
 				Before="AppSearch"
 				Condition="NOT REMOVE" />
 
@@ -558,13 +467,8 @@
 				Condition="NOT AK_EXISTING AND AK_HKCU" />
 
 			<Custom
-				Action="LoadExistingSettings"
-				After="SetApiKeyExistingFromHkcu"
-				Condition="NOT REMOVE" />
-
-			<Custom
 				Action="RestoreBearerOnly"
-				After="LoadExistingSettings"
+				After="SetApiKeyExistingFromHkcu"
 				Condition="NOT BEARERTOKEN AND NOT APIKEY AND BT_EXISTING AND NOT AK_EXISTING AND NOT REMOVE" />
 
 			<Custom
@@ -593,11 +497,6 @@
 			<Custom
 				Action="LaunchTray"
 				After="InstallFinalize"
-				Condition="NOT REMOVE" />
-
-			<Custom
-				Action="CleanupMsiScripts"
-				After="LaunchTray"
 				Condition="NOT REMOVE" />
 
 		</InstallExecuteSequence>

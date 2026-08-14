@@ -90,9 +90,9 @@ jobs:
             deploy/macos/*.sh \
             deploy/macos/packaging/*.sh \
             deploy/macos/packaging/scripts/postinstall
-          ./deploy/packaging/build.sh `
-            --rid '${{ matrix.rid }}' `
-            --publish-dir '${{ matrix.publish_dir }}' `
+          ./deploy/packaging/build.sh \
+            --rid '${{ matrix.rid }}' \
+            --publish-dir '${{ matrix.publish_dir }}' \
             --version "$VERSION"
 
       - name: Upload artifacts

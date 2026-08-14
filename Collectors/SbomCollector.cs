@@ -195,8 +195,7 @@ public static class SbomCollector
 
         ProcessResult result = await processRunner.RunAsync(
             "powershell.exe",
-            ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-Command", script],
+            ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
             HostTimeout,
             cancellationToken);
 
@@ -232,8 +231,7 @@ public static class SbomCollector
 
         ProcessResult result = await processRunner.RunAsync(
             "powershell.exe",
-            ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-Command", script],
+            ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
             HostTimeout,
             cancellationToken);
 

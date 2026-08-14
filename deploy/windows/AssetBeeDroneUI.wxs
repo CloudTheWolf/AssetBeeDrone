@@ -85,19 +85,24 @@
 					Text="Uninstall">
 
 					<Publish
-						Property="WixQuietExecCmdLine"
-						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[SAME_VERSION_PRODUCT]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui basic"
+						Property="UNINSTALL_PRODUCTS"
+						Value="[SAME_VERSION_PRODUCT]"
 						Order="1" />
+
+					<Publish
+						Property="UNINSTALL_UI"
+						Value="basic"
+						Order="2" />
 
 					<Publish
 						Event="DoAction"
 						Value="UninstallRelatedProducts"
-						Order="2" />
+						Order="3" />
 
 					<Publish
 						Event="EndDialog"
 						Value="Exit"
-						Order="3" />
+						Order="4" />
 
 				</Control>
 
@@ -304,20 +309,20 @@
 						Condition="NOT ENDPOINT OR NOT (ENDPOINT &lt;&lt; &quot;https://&quot;) OR NOT ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 					<Publish
-						Property="WixQuietExecCmdLine"
-						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot;"
+						Event="DoAction"
+						Value="SavePendingSettings"
 						Order="5"
 						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 					<Publish
-						Event="DoAction"
-						Value="SavePendingSettings"
+						Property="UNINSTALL_PRODUCTS"
+						Value="[LEGACY_UPGRADE_DETECTED]"
 						Order="6"
-						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
+						Condition="LEGACY_UPGRADE_DETECTED AND ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 					<Publish
-						Property="WixQuietExecCmdLine"
-						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[LEGACY_UPGRADE_DETECTED]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui quiet"
+						Property="UNINSTALL_UI"
+						Value="quiet"
 						Order="7"
 						Condition="LEGACY_UPGRADE_DETECTED AND ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
@@ -409,24 +414,24 @@
 			<Publish
 				Dialog="WelcomeDlg"
 				Control="Next"
-				Property="WixQuietExecCmdLine"
-				Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot;"
+				Event="DoAction"
+				Value="SavePendingSettings"
 				Order="4"
 				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 			<Publish
 				Dialog="WelcomeDlg"
 				Control="Next"
-				Event="DoAction"
-				Value="SavePendingSettings"
+				Property="UNINSTALL_PRODUCTS"
+				Value="[LEGACY_UPGRADE_DETECTED]"
 				Order="5"
 				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
 			<Publish
 				Dialog="WelcomeDlg"
 				Control="Next"
-				Property="WixQuietExecCmdLine"
-				Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[LEGACY_UPGRADE_DETECTED]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui quiet"
+				Property="UNINSTALL_UI"
+				Value="quiet"
 				Order="6"
 				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 

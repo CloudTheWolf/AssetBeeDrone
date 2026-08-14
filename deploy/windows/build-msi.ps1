@@ -48,6 +48,24 @@ if (-not (Test-Path -LiteralPath $tray)) {
     throw "Tray binary not found after publish: $tray"
 }
 
+$helperOut = Join-Path $scriptDir 'obj\helper'
+Write-Host 'Publishing MSI helper...'
+& dotnet publish (Join-Path $repoRoot 'AssetBeeDrone.MsiHelper\AssetBeeDrone.MsiHelper.csproj') `
+    -c Release `
+    -r win-x64 `
+    --self-contained true `
+    -p:PublishAot=true `
+    -p:Version=$Version `
+    -o $helperOut
+if ($LASTEXITCODE -ne 0) {
+    throw "MSI helper publish failed with exit code $LASTEXITCODE"
+}
+
+$helper = Join-Path $helperOut 'AssetBee.Drone.MsiHelper.exe'
+if (-not (Test-Path -LiteralPath $helper)) {
+    throw "MSI helper binary not found after publish: $helper"
+}
+
 $wixVersion = '7.0.0'
 $wixEulaId = 'wix7'
 $wixToolDir = Join-Path $env:USERPROFILE '.dotnet\tools'
@@ -103,81 +121,6 @@ $env:PATH = "$wixToolDir;$env:PATH"
 
 $outputMsi = Join-Path $OutputDirectory "AssetBee.Drone-$Version-win-x64.msi"
 
-$savePendingPath = Join-Path $scriptDir 'SavePendingSettings.ps1'
-$loadExistingPath = Join-Path $scriptDir 'LoadExistingSettings.ps1'
-$preservePath = Join-Path $scriptDir 'PreserveExistingSettings.ps1'
-$uninstallRelatedPath = Join-Path $scriptDir 'UninstallRelatedProducts.ps1'
-foreach ($p in @($savePendingPath, $loadExistingPath, $preservePath, $uninstallRelatedPath)) {
-    if (-not (Test-Path -LiteralPath $p)) {
-        throw "Missing $p"
-    }
-}
-
-# Build -EncodedCommand payloads that materialize helper scripts.
-# Avoids certutil -decode (a common AV/PUP heuristic) and keeps '[' out of MSI formatted strings.
-function New-ExtractEncodedCommand {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $DestinationInit,
-        [Parameter(Mandatory = $true)]
-        [hashtable] $Files
-    )
-
-    $lines = [System.Collections.Generic.List[string]]::new()
-    $lines.Add('$ErrorActionPreference = ''Stop''')
-    foreach ($line in ($DestinationInit -split '\r?\n')) {
-        if (-not [string]::IsNullOrWhiteSpace($line)) {
-            $lines.Add($line)
-        }
-    }
-
-    foreach ($entry in $Files.GetEnumerator()) {
-        $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($entry.Value))
-        $lines.Add(
-            ("[IO.File]::WriteAllBytes((Join-Path `$d '{0}'), [Convert]::FromBase64String('{1}'))" -f $entry.Key, $b64)
-        )
-    }
-
-    $lines.Add('exit 0')
-    $script = ($lines -join "`n")
-    return [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
-}
-
-$uiFiles = @{
-    'AssetBee-SavePending.ps1'      = $savePendingPath
-    'AssetBee-LoadExisting.ps1'     = $loadExistingPath
-    'AssetBee-PreserveSettings.ps1' = $preservePath
-    'AssetBee-UninstallRelated.ps1' = $uninstallRelatedPath
-}
-
-$elevatedFiles = @{
-    'AssetBee-SavePending.ps1'      = $savePendingPath
-    'AssetBee-LoadExisting.ps1'     = $loadExistingPath
-    'AssetBee-PreserveSettings.ps1' = $preservePath
-}
-
-$elevatedInit = @'
-$d = Join-Path $env:ProgramData 'AssetBee\Drone\msi-scripts'
-New-Item -ItemType Directory -Force -Path $d | Out-Null
-'@
-
-$extractUiEncoded = New-ExtractEncodedCommand -DestinationInit '$d = $env:TEMP' -Files $uiFiles
-$extractElevatedEncoded = New-ExtractEncodedCommand -DestinationInit $elevatedInit -Files $elevatedFiles
-
-# Write defines to an include file so huge -EncodedCommand payloads are not
-# passed on the wix.exe command line (CreateProcess length limits).
-$generatedDir = Join-Path $scriptDir 'obj'
-New-Item -ItemType Directory -Path $generatedDir -Force | Out-Null
-$definesPath = Join-Path $generatedDir 'ExtractScriptDefines.wxi'
-$definesXml = @"
-<?xml version="1.0" encoding="utf-8"?>
-<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
-	<?define ExtractScriptsUiEncoded="$extractUiEncoded" ?>
-	<?define ExtractScriptsElevatedEncoded="$extractElevatedEncoded" ?>
-</Include>
-"@
-[IO.File]::WriteAllText($definesPath, $definesXml)
-
 function Invoke-AuthenticodeSign {
     param(
         [Parameter(Mandatory = $true)]
@@ -209,7 +152,7 @@ function Invoke-AuthenticodeSign {
 
 if ($SignThumbprint) {
     # Sign payload EXEs before they are embedded in the MSI.
-    Invoke-AuthenticodeSign -Paths @($exe, $tray)
+    Invoke-AuthenticodeSign -Paths @($exe, $tray, $helper)
 } else {
     Write-Host 'Skipping Authenticode signing (pass -SignThumbprint to enable).'
 }
@@ -224,6 +167,7 @@ if ($SignThumbprint) {
     -d "Version=$Version" `
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `
+    -d "HelperPath=$helper" `
     -arch x64 `
     -o $outputMsi
 

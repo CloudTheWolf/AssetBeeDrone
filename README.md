@@ -162,8 +162,9 @@ Native AOT publish and native package builds must run on the matching OS family
 Artifacts land in `dist/`: portable archives (`.zip` / `.tar.gz`) plus native
 packages (`.msi`, `.deb`, `.rpm`, `.pkg`).
 
-Sigstore attests build provenance; it does **not** replace Windows Authenticode /
-SmartScreen. For production MSI reputation, still Authenticode-sign:
+Windows MSI custom actions use a native helper EXE (no PowerShell /
+`EncodedCommand` / `certutil` script drops). For production SmartScreen
+reputation, still Authenticode-sign:
 
 ```powershell
 .\deploy\windows\build-msi.ps1 `
