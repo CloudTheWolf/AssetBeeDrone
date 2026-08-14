@@ -3,6 +3,8 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
+	<?include obj\ExtractScriptDefines.wxi ?>
+
 	<Package
 		Name="AssetBee Drone"
 		Manufacturer="AssetBee"
@@ -10,6 +12,14 @@
 		UpgradeCode="A7E3C2B1-4D5F-6A78-9B0C-1D2E3F4A5B6C"
 		Scope="perMachine"
 		Language="1033">
+
+		<!-- ARP metadata helps enterprise allowlists and reduces "unknown publisher" noise. -->
+		<Property
+			Id="ARPCOMMENTS"
+			Value="AssetBee device inventory agent." />
+		<Property
+			Id="ARPCONTACT"
+			Value="AssetBee" />
 
 		<Upgrade Id="A7E3C2B1-4D5F-6A78-9B0C-1D2E3F4A5B6C">
 
@@ -378,7 +388,7 @@
 			Sequence="ui"
 			Before="ExtractMsiScripts"
 			Condition="NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$d=$env:TEMP; $c=Join-Path $env:SystemRoot 'System32\certutil.exe'; Set-Content -LiteralPath (Join-Path $d 'ab-sp.b64') -Value '$(var.SavePendingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-sp.b64') (Join-Path $d 'AssetBee-SavePending.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-le.b64') -Value '$(var.LoadExistingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-le.b64') (Join-Path $d 'AssetBee-LoadExisting.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-ps.b64') -Value '$(var.PreserveSettingsB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-ps.b64') (Join-Path $d 'AssetBee-PreserveSettings.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-ur.b64') -Value '$(var.UninstallRelatedB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-ur.b64') (Join-Path $d 'AssetBee-UninstallRelated.ps1') | Out-Null; exit 0&quot;" />
+			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -EncodedCommand $(var.ExtractScriptsUiEncoded)" />
 
 		<SetProperty
 			Id="WixQuietExecCmdLine"
@@ -386,7 +396,7 @@
 			Sequence="execute"
 			Before="ExtractMsiScriptsElevated"
 			Condition="NOT REMOVE"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$d=Join-Path $env:ProgramData 'AssetBee\Drone\msi-scripts'; New-Item -ItemType Directory -Force -Path $d | Out-Null; $c=Join-Path $env:SystemRoot 'System32\certutil.exe'; Set-Content -LiteralPath (Join-Path $d 'ab-sp.b64') -Value '$(var.SavePendingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-sp.b64') (Join-Path $d 'AssetBee-SavePending.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-le.b64') -Value '$(var.LoadExistingB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-le.b64') (Join-Path $d 'AssetBee-LoadExisting.ps1') | Out-Null; Set-Content -LiteralPath (Join-Path $d 'ab-ps.b64') -Value '$(var.PreserveSettingsB64)' -Encoding Ascii; &amp; $c -f -decode (Join-Path $d 'ab-ps.b64') (Join-Path $d 'AssetBee-PreserveSettings.ps1') | Out-Null; exit 0&quot;" />
+			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -EncodedCommand $(var.ExtractScriptsElevatedEncoded)" />
 
 		<SetProperty
 			Id="WixQuietExecCmdLine"
@@ -416,7 +426,7 @@
 			Id="WriteAppSettings"
 			Sequence="execute"
 			Before="WriteAppSettings"
-			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[INSTALLFOLDER]WriteAppSettings.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Install &quot;[INSTALLFOLDER].&quot;" />
+			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]WriteAppSettings.ps1&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Install &quot;[INSTALLFOLDER].&quot;" />
 
 		<CustomAction
 			Id="WriteAppSettings"
@@ -426,6 +436,22 @@
 			Impersonate="no"
 			HideTarget="yes"
 			Return="check" />
+
+		<CustomAction
+			Id="CleanupMsiScripts"
+			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+			DllEntry="WixQuietExec"
+			Execute="immediate"
+			Impersonate="no"
+			Return="ignore" />
+
+		<SetProperty
+			Id="WixQuietExecCmdLine"
+			Action="SetCleanupMsiScripts"
+			Sequence="execute"
+			Before="CleanupMsiScripts"
+			Condition="NOT REMOVE"
+			Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -Command &quot;Remove-Item -LiteralPath (Join-Path $env:ProgramData 'AssetBee\Drone\msi-scripts') -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath (Join-Path $env:TEMP 'AssetBee-SavePending.ps1'),(Join-Path $env:TEMP 'AssetBee-LoadExisting.ps1'),(Join-Path $env:TEMP 'AssetBee-PreserveSettings.ps1'),(Join-Path $env:TEMP 'AssetBee-UninstallRelated.ps1') -Force -ErrorAction SilentlyContinue; exit 0&quot;" />
 
 		<CustomAction
 			Id="LaunchTray"
@@ -567,6 +593,11 @@
 			<Custom
 				Action="LaunchTray"
 				After="InstallFinalize"
+				Condition="NOT REMOVE" />
+
+			<Custom
+				Action="CleanupMsiScripts"
+				After="LaunchTray"
 				Condition="NOT REMOVE" />
 
 		</InstallExecuteSequence>

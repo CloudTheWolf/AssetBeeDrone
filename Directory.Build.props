@@ -5,5 +5,12 @@
     <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version)</AssemblyVersion>
     <FileVersion Condition="'$(FileVersion)' == ''">$(Version)</FileVersion>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
+
+    <!-- PE/version resources: consistent publisher identity reduces AV/SmartScreen noise. -->
+    <Company>AssetBee</Company>
+    <Product>AssetBee Drone</Product>
+    <Authors>AssetBee</Authors>
+    <Copyright>Copyright (c) AssetBee</Copyright>
+    <Description>Collects and securely reports device inventory.</Description>
   </PropertyGroup>
 </Project>

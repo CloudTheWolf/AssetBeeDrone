@@ -2,7 +2,11 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $PublishDirectory,
     [string] $Version,
-    [string] $OutputDirectory
+    [string] $OutputDirectory,
+    # Optional Authenticode signing (strongly recommended to reduce SmartScreen / PUP false positives).
+    [string] $SignThumbprint,
+    [string] $SignTimestampUrl = 'http://timestamp.digicert.com',
+    [string] $SignToolPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -109,11 +113,106 @@ foreach ($p in @($savePendingPath, $loadExistingPath, $preservePath, $uninstallR
     }
 }
 
-# Embed scripts as base64; ExtractMsiScripts decodes with certutil (no [Type] literals in MSI strings).
-$savePendingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($savePendingPath))
-$loadExistingB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($loadExistingPath))
-$preserveSettingsB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($preservePath))
-$uninstallRelatedB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($uninstallRelatedPath))
+# Build -EncodedCommand payloads that materialize helper scripts.
+# Avoids certutil -decode (a common AV/PUP heuristic) and keeps '[' out of MSI formatted strings.
+function New-ExtractEncodedCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $DestinationInit,
+        [Parameter(Mandatory = $true)]
+        [hashtable] $Files
+    )
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add('$ErrorActionPreference = ''Stop''')
+    foreach ($line in ($DestinationInit -split '\r?\n')) {
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            $lines.Add($line)
+        }
+    }
+
+    foreach ($entry in $Files.GetEnumerator()) {
+        $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($entry.Value))
+        $lines.Add(
+            ("[IO.File]::WriteAllBytes((Join-Path `$d '{0}'), [Convert]::FromBase64String('{1}'))" -f $entry.Key, $b64)
+        )
+    }
+
+    $lines.Add('exit 0')
+    $script = ($lines -join "`n")
+    return [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script))
+}
+
+$uiFiles = @{
+    'AssetBee-SavePending.ps1'      = $savePendingPath
+    'AssetBee-LoadExisting.ps1'     = $loadExistingPath
+    'AssetBee-PreserveSettings.ps1' = $preservePath
+    'AssetBee-UninstallRelated.ps1' = $uninstallRelatedPath
+}
+
+$elevatedFiles = @{
+    'AssetBee-SavePending.ps1'      = $savePendingPath
+    'AssetBee-LoadExisting.ps1'     = $loadExistingPath
+    'AssetBee-PreserveSettings.ps1' = $preservePath
+}
+
+$elevatedInit = @'
+$d = Join-Path $env:ProgramData 'AssetBee\Drone\msi-scripts'
+New-Item -ItemType Directory -Force -Path $d | Out-Null
+'@
+
+$extractUiEncoded = New-ExtractEncodedCommand -DestinationInit '$d = $env:TEMP' -Files $uiFiles
+$extractElevatedEncoded = New-ExtractEncodedCommand -DestinationInit $elevatedInit -Files $elevatedFiles
+
+# Write defines to an include file so huge -EncodedCommand payloads are not
+# passed on the wix.exe command line (CreateProcess length limits).
+$generatedDir = Join-Path $scriptDir 'obj'
+New-Item -ItemType Directory -Path $generatedDir -Force | Out-Null
+$definesPath = Join-Path $generatedDir 'ExtractScriptDefines.wxi'
+$definesXml = @"
+<?xml version="1.0" encoding="utf-8"?>
+<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
+	<?define ExtractScriptsUiEncoded="$extractUiEncoded" ?>
+	<?define ExtractScriptsElevatedEncoded="$extractElevatedEncoded" ?>
+</Include>
+"@
+[IO.File]::WriteAllText($definesPath, $definesXml)
+
+function Invoke-AuthenticodeSign {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]] $Paths
+    )
+
+    $signtool = $SignToolPath
+    if (-not $signtool) {
+        $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+    }
+    if (-not $signtool -or -not (Test-Path -LiteralPath $signtool)) {
+        throw 'signtool.exe not found. Install the Windows SDK or pass -SignToolPath.'
+    }
+
+    foreach ($path in $Paths) {
+        Write-Host "Signing $path"
+        & $signtool sign `
+            /sha1 $SignThumbprint `
+            /fd SHA256 `
+            /td SHA256 `
+            /tr $SignTimestampUrl `
+            /v `
+            $path
+        if ($LASTEXITCODE -ne 0) {
+            throw "signtool failed for $path with exit code $LASTEXITCODE"
+        }
+    }
+}
+
+if ($SignThumbprint) {
+    # Sign payload EXEs before they are embedded in the MSI.
+    Invoke-AuthenticodeSign -Paths @($exe, $tray)
+} else {
+    Write-Host 'Skipping Authenticode signing (pass -SignThumbprint to enable).'
+}
 
 # -acceptEula is required for WiX v7+ (Open Source Maintenance Fee). See https://docs.firegiant.com/wix/osmf/
 & $wixExe build `
@@ -125,15 +224,15 @@ $uninstallRelatedB64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($uninst
     -d "Version=$Version" `
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `
-    -d "SavePendingB64=$savePendingB64" `
-    -d "LoadExistingB64=$loadExistingB64" `
-    -d "PreserveSettingsB64=$preserveSettingsB64" `
-    -d "UninstallRelatedB64=$uninstallRelatedB64" `
     -arch x64 `
     -o $outputMsi
 
 if ($LASTEXITCODE -ne 0) {
     throw "wix build failed with exit code $LASTEXITCODE"
+}
+
+if ($SignThumbprint) {
+    Invoke-AuthenticodeSign -Paths @($outputMsi)
 }
 
 Write-Host "Created $outputMsi"

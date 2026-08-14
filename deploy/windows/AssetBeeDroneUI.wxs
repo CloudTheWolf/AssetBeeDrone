@@ -86,7 +86,7 @@
 
 					<Publish
 						Property="WixQuietExecCmdLine"
-						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[SAME_VERSION_PRODUCT]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui basic"
+						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[SAME_VERSION_PRODUCT]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui basic"
 						Order="1" />
 
 					<Publish
@@ -305,7 +305,7 @@
 
 					<Publish
 						Property="WixQuietExecCmdLine"
-						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot;"
+						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot;"
 						Order="5"
 						Condition="ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
@@ -317,7 +317,7 @@
 
 					<Publish
 						Property="WixQuietExecCmdLine"
-						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[LEGACY_UPGRADE_DETECTED]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui quiet"
+						Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[LEGACY_UPGRADE_DETECTED]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui quiet"
 						Order="7"
 						Condition="LEGACY_UPGRADE_DETECTED AND ENDPOINT AND (ENDPOINT &lt;&lt; &quot;https://&quot;) AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
@@ -410,7 +410,7 @@
 				Dialog="WelcomeDlg"
 				Control="Next"
 				Property="WixQuietExecCmdLine"
-				Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot;"
+				Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-SavePending.ps1&quot; -Pending &quot;[PENDINGCONFIGPATH]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Bearer &quot;[BEARERTOKEN]&quot; -Api &quot;[APIKEY]&quot;"
 				Order="4"
 				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 
@@ -426,7 +426,7 @@
 				Dialog="WelcomeDlg"
 				Control="Next"
 				Property="WixQuietExecCmdLine"
-				Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoP -NonI -EP Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[LEGACY_UPGRADE_DETECTED]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui quiet"
+				Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[TempFolder]AssetBee-UninstallRelated.ps1&quot; -Products &quot;[LEGACY_UPGRADE_DETECTED]&quot; -Endpoint &quot;[ENDPOINT]&quot; -Ui quiet"
 				Order="6"
 				Condition="NOT Installed AND LEGACY_UPGRADE_DETECTED AND ENDPOINT AND ((BEARERTOKEN AND NOT APIKEY) OR (APIKEY AND NOT BEARERTOKEN))" />
 

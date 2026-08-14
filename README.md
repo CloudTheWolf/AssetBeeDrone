@@ -147,8 +147,20 @@ Native AOT publish and native package builds must run on the matching OS family
 ```
 
 Artifacts land in `dist/`: portable archives (`.zip` / `.tar.gz`) plus native
-packages (`.msi`, `.deb`, `.rpm`, `.pkg`). Packages are unsigned in v1; expect
-SmartScreen / Gatekeeper prompts until signed and notarized.
+packages (`.msi`, `.deb`, `.rpm`, `.pkg`).
+
+Windows MSI builds no longer use `certutil` script drops (a common AV/PUP
+heuristic). For production, Authenticode-sign the payload EXEs and MSI:
+
+```powershell
+.\deploy\windows\build-msi.ps1 `
+  -PublishDirectory .\bin\Release\net10.0\win-x64\publish `
+  -SignThumbprint <cert-sha1-thumbprint>
+```
+
+Unsigned packages still trigger SmartScreen / Gatekeeper until signed (and
+notarized on macOS). After signing, submit false-positive reports to major AV
+vendors so reputation can catch up.
 
 ## Install
 
