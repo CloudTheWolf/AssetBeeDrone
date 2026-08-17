@@ -60,4 +60,29 @@
     </ItemGroup>
   </Target>
 
+  <!--
+    .NET 10 Native AOT Apple crypto (Network.framework / Swift) must link against the
+    active Xcode macOS SDK. Without -isysroot, clang uses an older system Network.framework
+    and fails with undefined symbols (nw_framer_options_*_object_value, objc_msgSend$…).
+  -->
+  <Target Name="AddMacOsNativeAotSdkRoot"
+          BeforeTargets="LinkNative"
+          Condition="$([MSBuild]::IsOSPlatform('osx'))">
+    <Exec Command="xcrun --sdk macosx --show-sdk-path"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_MacOsSdkPath" />
+    </Exec>
+    <Warning Text="'$(_MacOsSdkPath)' == ''"
+             Text="Could not resolve macOS SDK via xcrun; Native AOT link may fail. Install/select a recent Xcode." />
+    <ItemGroup Condition="'$(_MacOsSdkPath)' != ''">
+      <LinkerArg Include="-isysroot" />
+      <LinkerArg Include="$(_MacOsSdkPath)" />
+      <LinkerArg Include="-L$(_MacOsSdkPath)/usr/lib/swift" />
+    </ItemGroup>
+    <Message Importance="High"
+             Text="Native AOT macOS SDK: $(_MacOsSdkPath)"
+             Condition="'$(_MacOsSdkPath)' != ''" />
+  </Target>
+
 </Project>
