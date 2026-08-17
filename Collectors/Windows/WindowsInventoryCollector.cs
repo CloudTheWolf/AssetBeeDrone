@@ -66,6 +66,7 @@ public sealed partial class WindowsInventoryCollector(
         }
         catch (JsonException)
         {
+            Console.WriteLine("The Windows inventory probe returned invalid JSON.");
             return FailedInventory("The Windows inventory probe returned invalid data.", sbom);
         }
     }
