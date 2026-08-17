@@ -11,3 +11,5 @@ appsettings.*.json
 inventory-debug.json
 inventory-debug*.json
 appsettings.json
+# Jenkins job script is pasted into Jenkins (not from SCM).
+jenkins/
