@@ -3,6 +3,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using AssetBeeDrone.Services;
+using AssetBeeDrone.Updating;
 
 namespace AssetBeeDrone.Infrastructure;
 
@@ -10,6 +11,7 @@ public static class TrayIpcPaths
 {
     public const string StatusFileName = "status.json";
     public const string SyncRequestFileName = "sync.request";
+    public const string InstallRequestFileName = "install.request";
 
     public static string GetDirectoryPath()
     {
@@ -25,6 +27,8 @@ public static class TrayIpcPaths
     public static string StatusPath => Path.Combine(GetDirectoryPath(), StatusFileName);
 
     public static string SyncRequestPath => Path.Combine(GetDirectoryPath(), SyncRequestFileName);
+
+    public static string InstallRequestPath => Path.Combine(GetDirectoryPath(), InstallRequestFileName);
 }
 
 /// <summary>
@@ -33,6 +37,7 @@ public static class TrayIpcPaths
 /// </summary>
 public sealed class TrayFileIpcServer(
     IInventorySyncController syncController,
+    IUpdateCoordinator? updateCoordinator,
     TimeProvider timeProvider,
     ILogger<TrayFileIpcServer> logger) : BackgroundService
 {
@@ -65,6 +70,7 @@ public sealed class TrayFileIpcServer(
             try
             {
                 await ProcessSyncRequestAsync(stoppingToken);
+                await ProcessInstallRequestAsync(stoppingToken);
                 await WriteStatusAsync(syncController.GetStatus(), message: null, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -108,6 +114,45 @@ public sealed class TrayFileIpcServer(
         _ = RunSyncInBackgroundAsync();
     }
 
+    private async Task ProcessInstallRequestAsync(CancellationToken cancellationToken)
+    {
+        if (updateCoordinator is null)
+        {
+            return;
+        }
+
+        string requestPath = TrayIpcPaths.InstallRequestPath;
+        if (!File.Exists(requestPath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(requestPath);
+        }
+        catch (IOException)
+        {
+            return;
+        }
+
+        UpdateCoordinatorSnapshot snapshot = updateCoordinator.GetSnapshot();
+        if (snapshot.State is UpdateInstallState.Downloading or UpdateInstallState.Installing)
+        {
+            await WriteStatusAsync(syncController.GetStatus(), "Update already in progress.", cancellationToken);
+            return;
+        }
+
+        if (snapshot.State is not (UpdateInstallState.Available or UpdateInstallState.Failed))
+        {
+            await WriteStatusAsync(syncController.GetStatus(), "No update available to install.", cancellationToken);
+            return;
+        }
+
+        await WriteStatusAsync(syncController.GetStatus(), "Downloading update…", cancellationToken);
+        _ = RunInstallInBackgroundAsync();
+    }
+
     private async Task RunSyncInBackgroundAsync()
     {
         try
@@ -145,11 +190,53 @@ public sealed class TrayFileIpcServer(
         }
     }
 
+    private async Task RunInstallInBackgroundAsync()
+    {
+        if (updateCoordinator is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await updateCoordinator.RequestInstallAsync(_appStopping);
+            UpdateCoordinatorSnapshot after = updateCoordinator.GetSnapshot();
+            string message = after.State switch
+            {
+                UpdateInstallState.Failed => after.Error ?? "Update failed.",
+                UpdateInstallState.Installing => "Installing update…",
+                _ => "Update finished."
+            };
+            await WriteStatusAsync(syncController.GetStatus(), message, _appStopping);
+        }
+        catch (OperationCanceledException) when (_appStopping.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Tray-triggered update install failed");
+            try
+            {
+                await WriteStatusAsync(syncController.GetStatus(), exception.Message, CancellationToken.None);
+            }
+            catch
+            {
+                // Ignore secondary status write failures.
+            }
+        }
+    }
+
     private async Task WriteStatusAsync(
         InventorySyncStatus status,
         string? message,
         CancellationToken cancellationToken)
     {
+        UpdateCoordinatorSnapshot? update = updateCoordinator?.GetSnapshot();
+        bool updateAvailable = update is not null && (
+            update.State is UpdateInstallState.Downloading or UpdateInstallState.Installing ||
+            (update.State is UpdateInstallState.Available or UpdateInstallState.Failed &&
+             !string.IsNullOrWhiteSpace(update.Version)));
+
         TrayStatusResponse response = new(
             status.LastRunUtc,
             status.LastSuccessUtc,
@@ -157,7 +244,14 @@ public sealed class TrayFileIpcServer(
             status.Running,
             status.Busy,
             message,
-            timeProvider.GetUtcNow());
+            timeProvider.GetUtcNow(),
+            UpdateAvailable: updateAvailable,
+            UpdateVersion: update?.Version,
+            UpdateState: update?.State is null or UpdateInstallState.None
+                ? null
+                : update.State.ToString(),
+            UpdateError: update?.Error,
+            QuitTray: update?.QuitTray == true);
 
         string json = JsonSerializer.Serialize(response, TrayJsonContext.Default.TrayStatusResponse);
         string path = TrayIpcPaths.StatusPath;

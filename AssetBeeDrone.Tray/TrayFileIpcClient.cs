@@ -27,6 +27,8 @@ internal static class TrayFileIpcClient
 
     public static string SyncRequestPath => Path.Combine(GetDirectoryPath(), "sync.request");
 
+    public static string InstallRequestPath => Path.Combine(GetDirectoryPath(), "install.request");
+
     public static TrayStatusResponse? ReadStatus()
     {
         string path = StatusPath;
@@ -51,6 +53,13 @@ internal static class TrayFileIpcClient
         File.WriteAllText(SyncRequestPath, DateTimeOffset.UtcNow.ToString("O"));
     }
 
+    public static void RequestInstall()
+    {
+        string directory = GetDirectoryPath();
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(InstallRequestPath, DateTimeOffset.UtcNow.ToString("O"));
+    }
+
     public static bool IsServiceAlive(TrayStatusResponse status, TimeSpan maxAge)
     {
         if (status.ServiceAliveUtc is null)
@@ -69,4 +78,9 @@ internal sealed record TrayStatusResponse(
     bool Running,
     bool Busy,
     string? Message,
-    DateTimeOffset? ServiceAliveUtc);
+    DateTimeOffset? ServiceAliveUtc,
+    bool UpdateAvailable = false,
+    string? UpdateVersion = null,
+    string? UpdateState = null,
+    string? UpdateError = null,
+    bool QuitTray = false);

@@ -89,6 +89,39 @@ public sealed class InventoryWorkerSyncTests
         Assert.Equal(response.ServiceAliveUtc, parsed!.ServiceAliveUtc);
     }
 
+    [Fact]
+    public void Tray_status_json_includes_update_fields()
+    {
+        TrayStatusResponse response = new(
+            DateTimeOffset.Parse("2026-01-01T12:00:00Z"),
+            DateTimeOffset.Parse("2026-01-01T12:01:00Z"),
+            null,
+            Running: true,
+            Busy: false,
+            Message: null,
+            ServiceAliveUtc: DateTimeOffset.Parse("2026-01-01T12:02:00Z"),
+            UpdateAvailable: true,
+            UpdateVersion: "1.2.3",
+            UpdateState: "Available",
+            UpdateError: null,
+            QuitTray: false);
+
+        string json = System.Text.Json.JsonSerializer.Serialize(
+            response,
+            TrayJsonContext.Default.TrayStatusResponse);
+        Assert.Contains("\"updateAvailable\":true", json);
+        Assert.Contains("\"updateVersion\":\"1.2.3\"", json);
+        Assert.Contains("\"updateState\":\"Available\"", json);
+
+        TrayStatusResponse? parsed = System.Text.Json.JsonSerializer.Deserialize(
+            json,
+            TrayJsonContext.Default.TrayStatusResponse);
+        Assert.True(parsed!.UpdateAvailable);
+        Assert.Equal("1.2.3", parsed.UpdateVersion);
+        Assert.Equal("Available", parsed.UpdateState);
+        Assert.False(parsed.QuitTray);
+    }
+
     private static InventoryWorker CreateWorker(
         IDeviceInventoryCollector collector,
         IInventoryReporter reporter,

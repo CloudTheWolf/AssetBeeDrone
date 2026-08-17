@@ -7,6 +7,13 @@ namespace AssetBeeDrone.Updating;
 public interface IUpdateApplier
 {
     Task ApplyAsync(UpdateManifest manifest, UpdatePackage package, CancellationToken cancellationToken);
+
+    Task<string> DownloadAndVerifyAsync(
+        UpdateManifest manifest,
+        UpdatePackage package,
+        CancellationToken cancellationToken);
+
+    Task InstallDownloadedAsync(string packagePath, CancellationToken cancellationToken);
 }
 
 public sealed class UpdateApplier(
@@ -16,7 +23,17 @@ public sealed class UpdateApplier(
     ILogger<UpdateApplier> logger) : IUpdateApplier
 {
     public const string HttpClientName = "AssetBeeDrone.AutoUpdate.Download";
+
     public async Task ApplyAsync(
+        UpdateManifest manifest,
+        UpdatePackage package,
+        CancellationToken cancellationToken)
+    {
+        string packagePath = await DownloadAndVerifyAsync(manifest, package, cancellationToken);
+        await InstallDownloadedAsync(packagePath, cancellationToken);
+    }
+
+    public async Task<string> DownloadAndVerifyAsync(
         UpdateManifest manifest,
         UpdatePackage package,
         CancellationToken cancellationToken)
@@ -38,11 +55,14 @@ public sealed class UpdateApplier(
 
         await DownloadAsync(downloadUri, packagePath, cancellationToken);
         VerifySha256(packagePath, package.Sha256);
+        return packagePath;
+    }
 
+    public async Task InstallDownloadedAsync(string packagePath, CancellationToken cancellationToken)
+    {
         logger.LogInformation(
-            "Applying update {Version} via {FileName}; the service will restart after install",
-            manifest.Version,
-            package.FileName);
+            "Applying update via {FileName}; the service will restart after install",
+            Path.GetFileName(packagePath));
 
         await InstallAsync(packagePath, cancellationToken);
 

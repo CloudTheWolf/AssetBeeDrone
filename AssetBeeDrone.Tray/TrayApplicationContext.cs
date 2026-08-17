@@ -7,8 +7,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _lastSyncItem;
     private readonly ToolStripMenuItem _syncNowItem;
+    private readonly ToolStripMenuItem _installUpdateItem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private bool _syncInFlight;
+    private bool _installInFlight;
+    private string? _balloonAnnouncedVersion;
 
     public TrayApplicationContext()
     {
@@ -17,11 +20,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Enabled = false
         };
         _syncNowItem = new ToolStripMenuItem("Sync Now", null, (_, _) => SyncNow());
+        _installUpdateItem = new ToolStripMenuItem("Install Update", null, (_, _) => InstallUpdate())
+        {
+            Visible = false,
+            Enabled = false
+        };
 
         ContextMenuStrip menu = new();
         menu.Items.Add(_lastSyncItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_syncNowItem);
+        menu.Items.Add(_installUpdateItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitTray()));
         menu.Opening += (_, _) => RefreshStatus();
@@ -33,6 +42,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Visible = true,
             ContextMenuStrip = menu
         };
+        _notifyIcon.BalloonTipClicked += (_, _) => InstallUpdate();
 
         _refreshTimer = new System.Windows.Forms.Timer { Interval = 1_000 };
         _refreshTimer.Tick += (_, _) => RefreshStatus();
@@ -73,6 +83,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
             if (!TrayFileIpcClient.IsServiceAlive(status, ServiceAliveMaxAge))
             {
                 SetUnavailable("Service status is stale. Is AssetBeeDrone running?");
+                return;
+            }
+
+            if (status.QuitTray ||
+                string.Equals(status.UpdateState, "Installing", StringComparison.OrdinalIgnoreCase))
+            {
+                ExitTray();
                 return;
             }
 
@@ -126,19 +143,103 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private void InstallUpdate()
+    {
+        if (_installInFlight)
+        {
+            return;
+        }
+
+        try
+        {
+            TrayStatusResponse? before = TrayFileIpcClient.ReadStatus();
+            if (before is null || !TrayFileIpcClient.IsServiceAlive(before, ServiceAliveMaxAge))
+            {
+                ShowTip("AssetBee Drone", "Service is not running.", ToolTipIcon.Warning);
+                return;
+            }
+
+            if (!before.UpdateAvailable)
+            {
+                return;
+            }
+
+            if (string.Equals(before.UpdateState, "Downloading", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(before.UpdateState, "Installing", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowTip("AssetBee Drone", "Update already in progress.", ToolTipIcon.Info);
+                return;
+            }
+
+            _installInFlight = true;
+            _installUpdateItem.Enabled = false;
+            TrayFileIpcClient.RequestInstall();
+            ShowTip(
+                "AssetBee Drone",
+                string.IsNullOrWhiteSpace(before.UpdateVersion)
+                    ? "Downloading update…"
+                    : $"Downloading update {before.UpdateVersion}…",
+                ToolTipIcon.Info);
+            RefreshStatus();
+        }
+        catch (Exception exception)
+        {
+            ShowTip("AssetBee Drone", $"Update failed: {exception.Message}", ToolTipIcon.Error);
+            _installInFlight = false;
+            _installUpdateItem.Enabled = true;
+        }
+    }
+
     private void ApplyStatus(TrayStatusResponse status)
     {
         _lastSyncItem.Text = status.LastSuccessUtc is null
             ? "Last sync: Never"
             : $"Last sync: {status.LastSuccessUtc.Value.ToLocalTime():g}";
 
-        string tooltip = status.Busy || status.Running
-            ? "AssetBee Drone — syncing"
-            : string.IsNullOrWhiteSpace(status.LastError)
-                ? "AssetBee Drone — running"
-                : "AssetBee Drone — last sync had errors";
+        bool updateBusy =
+            string.Equals(status.UpdateState, "Downloading", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(status.UpdateState, "Installing", StringComparison.OrdinalIgnoreCase);
+        bool canInstall = status.UpdateAvailable && !updateBusy && !_installInFlight;
+
+        _installUpdateItem.Visible = status.UpdateAvailable || updateBusy;
+        _installUpdateItem.Enabled = canInstall;
+        _installUpdateItem.Text = updateBusy
+            ? (string.Equals(status.UpdateState, "Installing", StringComparison.OrdinalIgnoreCase)
+                ? "Installing update…"
+                : "Downloading update…")
+            : string.IsNullOrWhiteSpace(status.UpdateVersion)
+                ? "Install Update"
+                : $"Install Update ({status.UpdateVersion})";
+
+        if (status.UpdateAvailable &&
+            !updateBusy &&
+            !string.IsNullOrWhiteSpace(status.UpdateVersion) &&
+            !string.Equals(_balloonAnnouncedVersion, status.UpdateVersion, StringComparison.Ordinal))
+        {
+            _balloonAnnouncedVersion = status.UpdateVersion;
+            ShowTip(
+                "AssetBee Drone",
+                $"Update {status.UpdateVersion} available — click to install.",
+                ToolTipIcon.Info);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status.UpdateError) &&
+            string.Equals(status.UpdateState, "Failed", StringComparison.OrdinalIgnoreCase))
+        {
+            _installInFlight = false;
+        }
+
+        string tooltip = updateBusy
+            ? "AssetBee Drone — updating"
+            : status.Busy || status.Running
+                ? "AssetBee Drone — syncing"
+                : status.UpdateAvailable
+                    ? TruncateTip($"AssetBee Drone — update {status.UpdateVersion} available")
+                    : string.IsNullOrWhiteSpace(status.LastError)
+                        ? "AssetBee Drone — running"
+                        : "AssetBee Drone — last sync had errors";
         _notifyIcon.Text = TruncateTip(tooltip);
-        _syncNowItem.Enabled = !_syncInFlight && !status.Busy && !status.Running;
+        _syncNowItem.Enabled = !_syncInFlight && !status.Busy && !status.Running && !updateBusy;
     }
 
     private void SetUnavailable(string detail)
@@ -148,6 +249,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             : TruncateTip($"Unavailable: {detail}");
         _notifyIcon.Text = TruncateTip("AssetBee Drone — unavailable");
         _syncNowItem.Enabled = !_syncInFlight;
+        _installUpdateItem.Visible = false;
+        _installUpdateItem.Enabled = false;
+        _installInFlight = false;
     }
 
     private void ShowTip(string title, string text, ToolTipIcon icon)
@@ -155,7 +259,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.BalloonTipTitle = title;
         _notifyIcon.BalloonTipText = text;
         _notifyIcon.BalloonTipIcon = icon;
-        _notifyIcon.ShowBalloonTip(4000);
+        _notifyIcon.ShowBalloonTip(8000);
     }
 
     private void ExitTray()

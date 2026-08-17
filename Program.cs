@@ -97,13 +97,19 @@ if (!string.IsNullOrWhiteSpace(BuildConstants.UpdateFeedUrl))
             services.GetRequiredService<IHostApplicationLifetime>(),
             services.GetRequiredService<ILogger<UpdateApplier>>());
     });
+    builder.Services.AddSingleton<IUpdateCoordinator, UpdateCoordinator>();
     builder.Services.AddHostedService<UpdateWorker>();
 }
 
 if (OperatingSystem.IsWindows())
 {
     builder.Services.AddWindowsService(options => options.ServiceName = "AssetBee Drone");
-    builder.Services.AddHostedService<TrayFileIpcServer>();
+    builder.Services.AddHostedService(services =>
+        new TrayFileIpcServer(
+            services.GetRequiredService<IInventorySyncController>(),
+            services.GetService<IUpdateCoordinator>(),
+            services.GetRequiredService<TimeProvider>(),
+            services.GetRequiredService<ILogger<TrayFileIpcServer>>()));
 }
 else if (OperatingSystem.IsLinux())
 {

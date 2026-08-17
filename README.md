@@ -59,6 +59,10 @@ fetches that update manifest, and if a newer version is available it downloads
 the matching native package (MSI / deb / rpm / pkg), verifies the SHA-256, and
 installs it. The feed URL is baked in at build time (not `appsettings.json`).
 
+On **Windows**, the service only advertises a pending update to the tray
+(`Install Update` menu + balloon tip); download and install run after the user
+confirms. On **Linux/macOS**, updates apply silently with no tray prompt.
+
 The production feed depends on how you build:
 
 - **GitHub Actions** (tagged releases): `https://assetbee.software/drone/latest.json`

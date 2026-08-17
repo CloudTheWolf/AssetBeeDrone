@@ -9,7 +9,12 @@ public sealed record TrayStatusResponse(
     bool Running,
     bool Busy,
     string? Message = null,
-    DateTimeOffset? ServiceAliveUtc = null);
+    DateTimeOffset? ServiceAliveUtc = null,
+    bool UpdateAvailable = false,
+    string? UpdateVersion = null,
+    string? UpdateState = null,
+    string? UpdateError = null,
+    bool QuitTray = false);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

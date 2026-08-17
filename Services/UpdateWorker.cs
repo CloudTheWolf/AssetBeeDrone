@@ -7,6 +7,7 @@ namespace AssetBeeDrone.Services;
 public sealed class UpdateWorker(
     IUpdateFeedClient feedClient,
     IUpdateApplier applier,
+    IUpdateCoordinator coordinator,
     IOptions<DroneOptions> options,
     TimeProvider timeProvider,
     ILogger<UpdateWorker> logger) : BackgroundService
@@ -85,6 +86,13 @@ public sealed class UpdateWorker(
                 AppVersion.Current,
                 manifest.Version,
                 package.FileName);
+
+            if (OperatingSystem.IsWindows())
+            {
+                // Tray prompts the user; install starts only after install.request.
+                coordinator.TrySetPending(manifest, package);
+                return;
+            }
 
             await applier.ApplyAsync(manifest, package, cancellationToken);
         }
