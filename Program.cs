@@ -98,7 +98,10 @@ if (!string.IsNullOrWhiteSpace(BuildConstants.UpdateFeedUrl))
             services.GetRequiredService<ILogger<UpdateApplier>>());
     });
     builder.Services.AddSingleton<IUpdateCoordinator, UpdateCoordinator>();
-    builder.Services.AddHostedService<UpdateWorker>();
+    builder.Services.AddSingleton<UpdateWorker>();
+    builder.Services.AddSingleton<IUpdateCheckController>(services =>
+        services.GetRequiredService<UpdateWorker>());
+    builder.Services.AddHostedService(services => services.GetRequiredService<UpdateWorker>());
 }
 
 if (OperatingSystem.IsWindows())
@@ -108,6 +111,7 @@ if (OperatingSystem.IsWindows())
         new TrayFileIpcServer(
             services.GetRequiredService<IInventorySyncController>(),
             services.GetService<IUpdateCoordinator>(),
+            services.GetService<IUpdateCheckController>(),
             services.GetRequiredService<TimeProvider>(),
             services.GetRequiredService<ILogger<TrayFileIpcServer>>()));
 }

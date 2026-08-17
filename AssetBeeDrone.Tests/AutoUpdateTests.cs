@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using AssetBeeDrone.Configuration;
+using AssetBeeDrone.Services;
 using AssetBeeDrone.Updating;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -150,6 +151,96 @@ public sealed class AutoUpdateTests
         Assert.False(result.Succeeded);
         Assert.Contains(result.Failures!, failure =>
             failure.Contains("AutoUpdateIntervalHours", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UpdateWorker_CheckNow_reports_up_to_date()
+    {
+        FakeFeedClient feed = new(new UpdateManifest(AppVersion.Current.ToString(), []));
+        UpdateCoordinator coordinator = new(
+            new NoOpApplier(),
+            TimeProvider.System,
+            NullLogger<UpdateCoordinator>.Instance);
+        UpdateWorker worker = new(
+            feed,
+            new NoOpApplier(),
+            coordinator,
+            Options.Create(new DroneOptions
+            {
+                Endpoint = new Uri("https://inventory.example.test/v1")
+            }),
+            TimeProvider.System,
+            NullLogger<UpdateWorker>.Instance);
+
+        UpdateCheckResult result = await worker.CheckNowAsync(CancellationToken.None);
+
+        Assert.False(result.UpdateAvailable);
+        Assert.Contains("up to date", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(worker.LastCheckUtc);
+        Assert.Equal(result.Message, worker.LastCheckMessage);
+    }
+
+    [Fact]
+    public async Task UpdateWorker_CheckNow_stages_pending_update_on_windows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Version newer = new(
+            AppVersion.Current.Major,
+            AppVersion.Current.Minor,
+            AppVersion.Current.Build + 1);
+        UpdateManifest manifest = new(
+            newer.ToString(),
+            [new UpdatePackage("win-x64", $"AssetBee.Drone-{newer}-win-x64.msi", "abc")]);
+        FakeFeedClient feed = new(manifest);
+        UpdateCoordinator coordinator = new(
+            new NoOpApplier(),
+            TimeProvider.System,
+            NullLogger<UpdateCoordinator>.Instance);
+        UpdateWorker worker = new(
+            feed,
+            new NoOpApplier(),
+            coordinator,
+            Options.Create(new DroneOptions
+            {
+                Endpoint = new Uri("https://inventory.example.test/v1")
+            }),
+            TimeProvider.System,
+            NullLogger<UpdateWorker>.Instance);
+
+        UpdateCheckResult result = await worker.CheckNowAsync(CancellationToken.None);
+
+        Assert.True(result.UpdateAvailable);
+        Assert.Equal(newer.ToString(), result.AvailableVersion);
+        Assert.Equal(UpdateInstallState.Available, coordinator.GetSnapshot().State);
+        Assert.Equal(newer.ToString(), coordinator.GetSnapshot().Version);
+    }
+
+    private sealed class FakeFeedClient(UpdateManifest? manifest) : IUpdateFeedClient
+    {
+        public Task<UpdateManifest?> FetchManifestAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(manifest);
+    }
+
+    private sealed class NoOpApplier : IUpdateApplier
+    {
+        public Task ApplyAsync(
+            UpdateManifest manifest,
+            UpdatePackage package,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<string> DownloadAndVerifyAsync(
+            UpdateManifest manifest,
+            UpdatePackage package,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(package.FileName);
+
+        public Task InstallDownloadedAsync(string packagePath, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     private sealed class StaticJsonHandler(string json) : HttpMessageHandler

@@ -12,6 +12,7 @@ public static class TrayIpcPaths
     public const string StatusFileName = "status.json";
     public const string SyncRequestFileName = "sync.request";
     public const string InstallRequestFileName = "install.request";
+    public const string CheckUpdateRequestFileName = "checkupdate.request";
 
     public static string GetDirectoryPath()
     {
@@ -29,6 +30,9 @@ public static class TrayIpcPaths
     public static string SyncRequestPath => Path.Combine(GetDirectoryPath(), SyncRequestFileName);
 
     public static string InstallRequestPath => Path.Combine(GetDirectoryPath(), InstallRequestFileName);
+
+    public static string CheckUpdateRequestPath =>
+        Path.Combine(GetDirectoryPath(), CheckUpdateRequestFileName);
 }
 
 /// <summary>
@@ -38,10 +42,13 @@ public static class TrayIpcPaths
 public sealed class TrayFileIpcServer(
     IInventorySyncController syncController,
     IUpdateCoordinator? updateCoordinator,
+    IUpdateCheckController? updateCheckController,
     TimeProvider timeProvider,
     ILogger<TrayFileIpcServer> logger) : BackgroundService
 {
     private CancellationToken _appStopping;
+    private DateTimeOffset? _fallbackLastCheckUtc;
+    private string? _fallbackLastCheckMessage;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -70,6 +77,7 @@ public sealed class TrayFileIpcServer(
             try
             {
                 await ProcessSyncRequestAsync(stoppingToken);
+                await ProcessCheckUpdateRequestAsync(stoppingToken);
                 await ProcessInstallRequestAsync(stoppingToken);
                 await WriteStatusAsync(syncController.GetStatus(), message: null, stoppingToken);
             }
@@ -114,6 +122,45 @@ public sealed class TrayFileIpcServer(
         _ = RunSyncInBackgroundAsync();
     }
 
+    private async Task ProcessCheckUpdateRequestAsync(CancellationToken cancellationToken)
+    {
+        string requestPath = TrayIpcPaths.CheckUpdateRequestPath;
+        if (!File.Exists(requestPath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(requestPath);
+        }
+        catch (IOException)
+        {
+            return;
+        }
+
+        if (updateCheckController is null)
+        {
+            _fallbackLastCheckUtc = timeProvider.GetUtcNow();
+            _fallbackLastCheckMessage = "Updates are not configured for this build.";
+            await WriteStatusAsync(
+                syncController.GetStatus(),
+                _fallbackLastCheckMessage,
+                cancellationToken);
+            return;
+        }
+
+        UpdateCoordinatorSnapshot? snapshot = updateCoordinator?.GetSnapshot();
+        if (snapshot?.State is UpdateInstallState.Downloading or UpdateInstallState.Installing)
+        {
+            await WriteStatusAsync(syncController.GetStatus(), "Update already in progress.", cancellationToken);
+            return;
+        }
+
+        await WriteStatusAsync(syncController.GetStatus(), "Checking for updates…", cancellationToken);
+        _ = RunCheckUpdateInBackgroundAsync();
+    }
+
     private async Task ProcessInstallRequestAsync(CancellationToken cancellationToken)
     {
         if (updateCoordinator is null)
@@ -151,6 +198,36 @@ public sealed class TrayFileIpcServer(
 
         await WriteStatusAsync(syncController.GetStatus(), "Downloading update…", cancellationToken);
         _ = RunInstallInBackgroundAsync();
+    }
+
+    private async Task RunCheckUpdateInBackgroundAsync()
+    {
+        if (updateCheckController is null)
+        {
+            return;
+        }
+
+        try
+        {
+            UpdateCheckResult result = await updateCheckController.CheckNowAsync(_appStopping);
+            await WriteStatusAsync(syncController.GetStatus(), result.Message, _appStopping);
+            logger.LogInformation("Tray-triggered update check: {Message}", result.Message);
+        }
+        catch (OperationCanceledException) when (_appStopping.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Tray-triggered update check failed");
+            try
+            {
+                await WriteStatusAsync(syncController.GetStatus(), exception.Message, CancellationToken.None);
+            }
+            catch
+            {
+                // Ignore secondary status write failures.
+            }
+        }
     }
 
     private async Task RunSyncInBackgroundAsync()
@@ -251,7 +328,10 @@ public sealed class TrayFileIpcServer(
                 ? null
                 : update.State.ToString(),
             UpdateError: update?.Error,
-            QuitTray: update?.QuitTray == true);
+            QuitTray: update?.QuitTray == true,
+            ServiceVersion: AppVersion.Current.ToString(),
+            LastUpdateCheckUtc: updateCheckController?.LastCheckUtc ?? _fallbackLastCheckUtc,
+            LastUpdateCheckMessage: updateCheckController?.LastCheckMessage ?? _fallbackLastCheckMessage);
 
         string json = JsonSerializer.Serialize(response, TrayJsonContext.Default.TrayStatusResponse);
         string path = TrayIpcPaths.StatusPath;

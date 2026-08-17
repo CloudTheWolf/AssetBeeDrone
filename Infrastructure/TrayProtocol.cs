@@ -14,7 +14,10 @@ public sealed record TrayStatusResponse(
     string? UpdateVersion = null,
     string? UpdateState = null,
     string? UpdateError = null,
-    bool QuitTray = false);
+    bool QuitTray = false,
+    string? ServiceVersion = null,
+    DateTimeOffset? LastUpdateCheckUtc = null,
+    string? LastUpdateCheckMessage = null);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,

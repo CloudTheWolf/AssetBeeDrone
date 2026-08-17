@@ -29,6 +29,8 @@ internal static class TrayFileIpcClient
 
     public static string InstallRequestPath => Path.Combine(GetDirectoryPath(), "install.request");
 
+    public static string CheckUpdateRequestPath => Path.Combine(GetDirectoryPath(), "checkupdate.request");
+
     public static TrayStatusResponse? ReadStatus()
     {
         string path = StatusPath;
@@ -48,16 +50,17 @@ internal static class TrayFileIpcClient
 
     public static void RequestSync()
     {
-        string directory = GetDirectoryPath();
-        Directory.CreateDirectory(directory);
-        File.WriteAllText(SyncRequestPath, DateTimeOffset.UtcNow.ToString("O"));
+        WriteRequest(SyncRequestPath);
     }
 
     public static void RequestInstall()
     {
-        string directory = GetDirectoryPath();
-        Directory.CreateDirectory(directory);
-        File.WriteAllText(InstallRequestPath, DateTimeOffset.UtcNow.ToString("O"));
+        WriteRequest(InstallRequestPath);
+    }
+
+    public static void RequestCheckUpdate()
+    {
+        WriteRequest(CheckUpdateRequestPath);
     }
 
     public static bool IsServiceAlive(TrayStatusResponse status, TimeSpan maxAge)
@@ -68,6 +71,13 @@ internal static class TrayFileIpcClient
         }
 
         return DateTimeOffset.UtcNow - status.ServiceAliveUtc.Value <= maxAge;
+    }
+
+    private static void WriteRequest(string path)
+    {
+        string directory = GetDirectoryPath();
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(path, DateTimeOffset.UtcNow.ToString("O"));
     }
 }
 
@@ -83,4 +93,7 @@ internal sealed record TrayStatusResponse(
     string? UpdateVersion = null,
     string? UpdateState = null,
     string? UpdateError = null,
-    bool QuitTray = false);
+    bool QuitTray = false,
+    string? ServiceVersion = null,
+    DateTimeOffset? LastUpdateCheckUtc = null,
+    string? LastUpdateCheckMessage = null);

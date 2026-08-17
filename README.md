@@ -61,7 +61,9 @@ installs it. The feed URL is baked in at build time (not `appsettings.json`).
 
 On **Windows**, the service only advertises a pending update to the tray
 (`Install Update` menu + balloon tip); download and install run after the user
-confirms. On **Linux/macOS**, updates apply silently with no tray prompt.
+confirms. Use **Check for Updates** in the tray to poll the feed immediately;
+**About** shows service and tray versions. On **Linux/macOS**, updates apply
+silently with no tray prompt.
 
 The production feed depends on how you build:
 

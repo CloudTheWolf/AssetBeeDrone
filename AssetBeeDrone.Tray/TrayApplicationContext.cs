@@ -1,17 +1,24 @@
+using System.Reflection;
+
 namespace AssetBeeDrone.Tray;
 
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private static readonly TimeSpan ServiceAliveMaxAge = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan CheckUpdateTimeout = TimeSpan.FromSeconds(45);
 
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _lastSyncItem;
     private readonly ToolStripMenuItem _syncNowItem;
+    private readonly ToolStripMenuItem _checkUpdatesItem;
     private readonly ToolStripMenuItem _installUpdateItem;
+    private readonly ToolStripMenuItem _aboutItem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private bool _syncInFlight;
+    private bool _checkInFlight;
     private bool _installInFlight;
     private string? _balloonAnnouncedVersion;
+    private string? _lastServiceVersion;
 
     public TrayApplicationContext()
     {
@@ -20,18 +27,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Enabled = false
         };
         _syncNowItem = new ToolStripMenuItem("Sync Now", null, (_, _) => SyncNow());
+        _checkUpdatesItem = new ToolStripMenuItem("Check for Updates", null, (_, _) => CheckForUpdates());
         _installUpdateItem = new ToolStripMenuItem("Install Update", null, (_, _) => InstallUpdate())
         {
             Visible = false,
             Enabled = false
         };
+        _aboutItem = new ToolStripMenuItem("About", null, (_, _) => ShowAbout());
 
         ContextMenuStrip menu = new();
         menu.Items.Add(_lastSyncItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_syncNowItem);
+        menu.Items.Add(_checkUpdatesItem);
         menu.Items.Add(_installUpdateItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(_aboutItem);
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitTray()));
         menu.Opening += (_, _) => RefreshStatus();
 
@@ -143,6 +154,83 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private async void CheckForUpdates()
+    {
+        if (_checkInFlight)
+        {
+            return;
+        }
+
+        _checkInFlight = true;
+        _checkUpdatesItem.Enabled = false;
+        try
+        {
+            TrayStatusResponse? before = TrayFileIpcClient.ReadStatus();
+            if (before is null || !TrayFileIpcClient.IsServiceAlive(before, ServiceAliveMaxAge))
+            {
+                ShowTip("AssetBee Drone", "Service is not running.", ToolTipIcon.Warning);
+                SetUnavailable("Service is not running.");
+                return;
+            }
+
+            if (string.Equals(before.UpdateState, "Downloading", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(before.UpdateState, "Installing", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowTip("AssetBee Drone", "Update already in progress.", ToolTipIcon.Info);
+                return;
+            }
+
+            DateTimeOffset? priorCheckUtc = before.LastUpdateCheckUtc;
+            TrayFileIpcClient.RequestCheckUpdate();
+            ShowTip("AssetBee Drone", "Checking for updates…", ToolTipIcon.Info);
+
+            TrayStatusResponse? after = await WaitForUpdateCheckAsync(priorCheckUtc);
+            RefreshStatus();
+
+            string message = after?.LastUpdateCheckMessage
+                ?? after?.Message
+                ?? "Update check finished.";
+            ToolTipIcon icon = after?.UpdateAvailable == true
+                ? ToolTipIcon.Info
+                : message.Contains("failed", StringComparison.OrdinalIgnoreCase) ||
+                  message.Contains("not configured", StringComparison.OrdinalIgnoreCase)
+                    ? ToolTipIcon.Warning
+                    : ToolTipIcon.Info;
+            ShowTip("AssetBee Drone", message, icon);
+        }
+        catch (Exception exception)
+        {
+            ShowTip("AssetBee Drone", $"Update check failed: {exception.Message}", ToolTipIcon.Error);
+        }
+        finally
+        {
+            _checkInFlight = false;
+            RefreshStatus();
+        }
+    }
+
+    private static async Task<TrayStatusResponse?> WaitForUpdateCheckAsync(DateTimeOffset? priorCheckUtc)
+    {
+        DateTimeOffset deadline = DateTimeOffset.UtcNow + CheckUpdateTimeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(250);
+            TrayStatusResponse? status = TrayFileIpcClient.ReadStatus();
+            if (status is null)
+            {
+                continue;
+            }
+
+            if (status.LastUpdateCheckUtc is not null &&
+                (priorCheckUtc is null || status.LastUpdateCheckUtc > priorCheckUtc))
+            {
+                return status;
+            }
+        }
+
+        return TrayFileIpcClient.ReadStatus();
+    }
+
     private void InstallUpdate()
     {
         if (_installInFlight)
@@ -190,8 +278,52 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private void ShowAbout()
+    {
+        TrayStatusResponse? status = null;
+        try
+        {
+            status = TrayFileIpcClient.ReadStatus();
+            if (status is not null && TrayFileIpcClient.IsServiceAlive(status, ServiceAliveMaxAge))
+            {
+                _lastServiceVersion = status.ServiceVersion ?? _lastServiceVersion;
+            }
+        }
+        catch
+        {
+            // About still works offline with the last known service version.
+        }
+
+        string trayVersion = GetTrayVersion();
+        string serviceVersion = !string.IsNullOrWhiteSpace(_lastServiceVersion)
+            ? _lastServiceVersion
+            : status?.ServiceVersion is { Length: > 0 } version
+                ? version
+                : "Unavailable";
+
+        string updateLine = status is not null &&
+            TrayFileIpcClient.IsServiceAlive(status, ServiceAliveMaxAge) &&
+            status.UpdateAvailable &&
+            !string.IsNullOrWhiteSpace(status.UpdateVersion)
+            ? $"{Environment.NewLine}Update available: {status.UpdateVersion}"
+            : string.Empty;
+
+        MessageBox.Show(
+            $"AssetBee Drone{Environment.NewLine}{Environment.NewLine}" +
+            $"Service version: {serviceVersion}{Environment.NewLine}" +
+            $"Tray version: {trayVersion}{updateLine}",
+            "About AssetBee Drone",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+    }
+
     private void ApplyStatus(TrayStatusResponse status)
     {
+        if (!string.IsNullOrWhiteSpace(status.ServiceVersion))
+        {
+            _lastServiceVersion = status.ServiceVersion;
+        }
+
         _lastSyncItem.Text = status.LastSuccessUtc is null
             ? "Last sync: Never"
             : $"Last sync: {status.LastSuccessUtc.Value.ToLocalTime():g}";
@@ -240,6 +372,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
                         : "AssetBee Drone — last sync had errors";
         _notifyIcon.Text = TruncateTip(tooltip);
         _syncNowItem.Enabled = !_syncInFlight && !status.Busy && !status.Running && !updateBusy;
+        _checkUpdatesItem.Enabled = !_checkInFlight && !updateBusy;
     }
 
     private void SetUnavailable(string detail)
@@ -249,6 +382,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             : TruncateTip($"Unavailable: {detail}");
         _notifyIcon.Text = TruncateTip("AssetBee Drone — unavailable");
         _syncNowItem.Enabled = !_syncInFlight;
+        _checkUpdatesItem.Enabled = !_checkInFlight;
         _installUpdateItem.Visible = false;
         _installUpdateItem.Enabled = false;
         _installInFlight = false;
@@ -279,6 +413,28 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         base.Dispose(disposing);
+    }
+
+    private static string GetTrayVersion()
+    {
+        Assembly assembly = typeof(TrayApplicationContext).Assembly;
+        string? informational = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            string core = informational;
+            int plus = core.IndexOf('+');
+            if (plus >= 0)
+            {
+                core = core[..plus];
+            }
+
+            return core;
+        }
+
+        Version? version = assembly.GetName().Version;
+        return version?.ToString() ?? "Unknown";
     }
 
     private static string TruncateTip(string value) =>

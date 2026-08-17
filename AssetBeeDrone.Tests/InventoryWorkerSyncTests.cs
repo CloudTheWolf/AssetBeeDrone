@@ -104,7 +104,10 @@ public sealed class InventoryWorkerSyncTests
             UpdateVersion: "1.2.3",
             UpdateState: "Available",
             UpdateError: null,
-            QuitTray: false);
+            QuitTray: false,
+            ServiceVersion: "1.0.0",
+            LastUpdateCheckUtc: DateTimeOffset.Parse("2026-01-01T12:03:00Z"),
+            LastUpdateCheckMessage: "You're up to date (1.0.0).");
 
         string json = System.Text.Json.JsonSerializer.Serialize(
             response,
@@ -112,6 +115,8 @@ public sealed class InventoryWorkerSyncTests
         Assert.Contains("\"updateAvailable\":true", json);
         Assert.Contains("\"updateVersion\":\"1.2.3\"", json);
         Assert.Contains("\"updateState\":\"Available\"", json);
+        Assert.Contains("\"serviceVersion\":\"1.0.0\"", json);
+        Assert.Contains("\"lastUpdateCheckMessage\"", json);
 
         TrayStatusResponse? parsed = System.Text.Json.JsonSerializer.Deserialize(
             json,
@@ -119,6 +124,8 @@ public sealed class InventoryWorkerSyncTests
         Assert.True(parsed!.UpdateAvailable);
         Assert.Equal("1.2.3", parsed.UpdateVersion);
         Assert.Equal("Available", parsed.UpdateState);
+        Assert.Equal("1.0.0", parsed.ServiceVersion);
+        Assert.Equal("You're up to date (1.0.0).", parsed.LastUpdateCheckMessage);
         Assert.False(parsed.QuitTray);
     }
 
