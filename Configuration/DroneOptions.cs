@@ -60,7 +60,7 @@ public sealed class DroneOptions
     /// How often to check the update feed when auto-update is enabled.
     /// </summary>
     [Range(1, 168)]
-    public int AutoUpdateIntervalHours { get; set; } = 24;
+    public int AutoUpdateIntervalHours { get; set; } = 1;
 
     public TimeSpan CollectionInterval => TimeSpan.FromMinutes(CollectionIntervalMinutes);
 

@@ -59,7 +59,8 @@ public sealed class UpdateCoordinatorTests
         Assert.Equal(1, applier.InstallCalls);
         Assert.Equal(@"C:\temp\AssetBee.Drone-2.0.0-win-x64.msi", applier.LastPackagePath);
         Assert.Equal(UpdateInstallState.Installing, coordinator.GetSnapshot().State);
-        Assert.True(coordinator.GetSnapshot().QuitTray);
+        // QuitTray is cleared before InstallDownloadedAsync so a relaunched tray is not poisoned.
+        Assert.False(coordinator.GetSnapshot().QuitTray);
     }
 
     [Fact]

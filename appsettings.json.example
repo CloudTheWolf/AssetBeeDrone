@@ -12,7 +12,7 @@
     "IncludeSbom": true,
     "IncludeContainerSboms": true,
     "AutoUpdate": true,
-    "AutoUpdateIntervalHours": 24
+    "AutoUpdateIntervalHours": 1
   },
   "Logging": {
     "LogLevel": {

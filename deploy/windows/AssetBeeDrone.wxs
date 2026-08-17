@@ -340,12 +340,16 @@
 			HideTarget="yes"
 			Return="check" />
 
+		<!--
+			Launch in interactive sessions via CreateProcessAsUser. A plain EXE CA
+			started by LocalSystem (silent auto-update) would land in Session 0.
+		-->
 		<CustomAction
 			Id="LaunchTray"
-			FileRef="TrayExe"
-			ExeCommand=""
+			FileRef="MsiHelperExe"
+			ExeCommand="launch-tray --path=&quot;[INSTALLFOLDER]AssetBee.Drone.Tray.exe&quot;"
 			Execute="immediate"
-			Impersonate="yes"
+			Impersonate="no"
 			Return="asyncNoWait" />
 
 		<InstallUISequence>

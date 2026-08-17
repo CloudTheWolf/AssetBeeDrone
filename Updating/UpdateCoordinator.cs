@@ -151,6 +151,12 @@ public sealed class UpdateCoordinator(
                 throw;
             }
 
+            // Clear QuitTray so a relaunched tray does not immediately exit on a stale status.json.
+            lock (_gate)
+            {
+                _quitTray = false;
+            }
+
             try
             {
                 await applier.InstallDownloadedAsync(packagePath, cancellationToken);

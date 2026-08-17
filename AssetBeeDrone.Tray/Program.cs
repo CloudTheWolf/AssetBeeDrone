@@ -2,7 +2,7 @@ namespace AssetBeeDrone.Tray;
 
 internal static class Program
 {
-    private const string MutexName = "Global\\AssetBee.Drone.Tray";
+    private const string MutexName = "Local\\AssetBee.Drone.Tray";
 
     [STAThread]
     private static void Main()

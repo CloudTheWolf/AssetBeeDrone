@@ -42,7 +42,7 @@ Drone__DebugOutputPath=inventory-debug.json
 Drone__IncludeSbom=true
 Drone__IncludeContainerSboms=true
 Drone__AutoUpdate=true
-Drone__AutoUpdateIntervalHours=24
+Drone__AutoUpdateIntervalHours=1
 ```
 
 `Drone__ApiKey` may be used instead of `Drone__BearerToken`; it is sent as
@@ -71,7 +71,7 @@ The production feed depends on how you build:
 - **Jenkins** (lab): `https://assets.callcorplab.com/drone/latest.json`
 
 Disable at runtime with `Drone__AutoUpdate=false`, or change the
-check interval with `Drone__AutoUpdateIntervalHours` (1–168, default 24).
+check interval with `Drone__AutoUpdateIntervalHours` (1–168, default 1).
 
 Local publish example:
 

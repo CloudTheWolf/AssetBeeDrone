@@ -6,6 +6,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
 {
     private static readonly TimeSpan ServiceAliveMaxAge = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan CheckUpdateTimeout = TimeSpan.FromSeconds(45);
+    /// <summary>
+    /// Ignore QuitTray/Installing right after start so a stale status.json from the
+    /// previous instance (or mid-update) does not immediately exit the new tray.
+    /// </summary>
+    private static readonly TimeSpan QuitGracePeriod = TimeSpan.FromSeconds(15);
 
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _lastSyncItem;
@@ -14,6 +19,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _installUpdateItem;
     private readonly ToolStripMenuItem _aboutItem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
+    private readonly DateTimeOffset _startedUtc = DateTimeOffset.UtcNow;
     private bool _syncInFlight;
     private bool _checkInFlight;
     private bool _installInFlight;
@@ -97,8 +103,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 return;
             }
 
-            if (status.QuitTray ||
-                string.Equals(status.UpdateState, "Installing", StringComparison.OrdinalIgnoreCase))
+            if ((status.QuitTray ||
+                 string.Equals(status.UpdateState, "Installing", StringComparison.OrdinalIgnoreCase)) &&
+                DateTimeOffset.UtcNow - _startedUtc > QuitGracePeriod)
             {
                 ExitTray();
                 return;

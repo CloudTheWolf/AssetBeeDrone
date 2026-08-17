@@ -26,6 +26,7 @@ internal static class Program
                 "preserve" => Preserve(),
                 "write-settings" => WriteSettings(ParseOptions(args.AsSpan(1))),
                 "uninstall-related" => UninstallRelated(ParseOptions(args.AsSpan(1))),
+                "launch-tray" => LaunchTray(ParseOptions(args.AsSpan(1))),
                 _ => Fail($"Unknown command: {args[0]}"),
             };
         }
@@ -107,6 +108,12 @@ internal static class Program
         }
 
         return value;
+    }
+
+    private static int LaunchTray(Dictionary<string, string> options)
+    {
+        string path = Required(options, "path");
+        return TrayLauncher.Launch(path);
     }
 
     private static int SavePending(Dictionary<string, string> options)
