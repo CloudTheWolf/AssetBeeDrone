@@ -73,7 +73,7 @@
           StandardOutputImportance="Low">
       <Output TaskParameter="ConsoleOutput" PropertyName="_MacOsSdkPath" />
     </Exec>
-    <Warning Text="'$(_MacOsSdkPath)' == ''"
+    <Warning Condition="'$(_MacOsSdkPath)' == ''"
              Text="Could not resolve macOS SDK via xcrun; Native AOT link may fail. Install/select a recent Xcode." />
     <ItemGroup Condition="'$(_MacOsSdkPath)' != ''">
       <LinkerArg Include="-isysroot" />
