@@ -57,6 +57,12 @@ public sealed class DroneOptionsValidator : IValidateOptions<DroneOptions>
                 "Drone:DebugOutputPath must be set when Drone:Debug is enabled.");
         }
 
+        if (options.AutoUpdateIntervalHours is < 1 or > 168)
+        {
+            return ValidateOptionsResult.Fail(
+                "Drone:AutoUpdateIntervalHours must be between 1 and 168.");
+        }
+
         return ValidateOptionsResult.Success;
     }
 }

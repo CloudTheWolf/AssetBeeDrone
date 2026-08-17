@@ -12,5 +12,11 @@
     <Authors>AssetBee</Authors>
     <Copyright>Copyright (c) AssetBee</Copyright>
     <Description>Collects and securely reports device inventory.</Description>
+
+    <!--
+      Full URL of the auto-update manifest (typically .../latest.json).
+      Empty disables auto-update. Override at publish: -p:UpdateFeedUrl=https://...
+    -->
+    <UpdateFeedUrl Condition="'$(UpdateFeedUrl)' == ''"></UpdateFeedUrl>
   </PropertyGroup>
 </Project>

@@ -6,6 +6,7 @@ using AssetBeeDrone.Configuration;
 using AssetBeeDrone.Infrastructure;
 using AssetBeeDrone.Reporting;
 using AssetBeeDrone.Services;
+using AssetBeeDrone.Updating;
 using Microsoft.Extensions.Options;
 
 string[] hostArgs = ApplyDebugFlag(args);
@@ -67,6 +68,37 @@ builder.Services.AddSingleton<InventoryWorker>();
 builder.Services.AddSingleton<IInventorySyncController>(services =>
     services.GetRequiredService<InventoryWorker>());
 builder.Services.AddHostedService(services => services.GetRequiredService<InventoryWorker>());
+
+if (!string.IsNullOrWhiteSpace(BuildConstants.UpdateFeedUrl))
+{
+    builder.Services.AddHttpClient(UpdateFeedClient.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromMinutes(2);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetBee-Drone/1.0");
+    });
+    builder.Services.AddHttpClient(UpdateApplier.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromMinutes(30);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetBee-Drone/1.0");
+    });
+    builder.Services.AddSingleton<IUpdateFeedClient>(services =>
+    {
+        IHttpClientFactory factory = services.GetRequiredService<IHttpClientFactory>();
+        return new UpdateFeedClient(
+            factory.CreateClient(UpdateFeedClient.HttpClientName),
+            services.GetRequiredService<ILogger<UpdateFeedClient>>());
+    });
+    builder.Services.AddSingleton<IUpdateApplier>(services =>
+    {
+        IHttpClientFactory factory = services.GetRequiredService<IHttpClientFactory>();
+        return new UpdateApplier(
+            factory.CreateClient(UpdateApplier.HttpClientName),
+            services.GetRequiredService<IProcessRunner>(),
+            services.GetRequiredService<IHostApplicationLifetime>(),
+            services.GetRequiredService<ILogger<UpdateApplier>>());
+    });
+    builder.Services.AddHostedService<UpdateWorker>();
+}
 
 if (OperatingSystem.IsWindows())
 {

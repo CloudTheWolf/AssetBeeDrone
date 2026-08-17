@@ -15,6 +15,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="AssetBeeDrone.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -27,5 +31,33 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
   </ItemGroup>
+
+  <!-- Bake UpdateFeedUrl into the binary for Native AOT (no runtime reflection). -->
+  <Target Name="GenerateBuildConstants"
+          BeforeTargets="BeforeCompile;CoreCompile"
+          DependsOnTargets="PrepareForBuild">
+    <PropertyGroup>
+      <_BuildConstantsPath>$(IntermediateOutputPath)BuildConstants.g.cs</_BuildConstantsPath>
+      <_EscapedUpdateFeedUrl>$([System.String]::Copy('$(UpdateFeedUrl)').Replace('\', '\\').Replace('"', '\"'))</_EscapedUpdateFeedUrl>
+    </PropertyGroup>
+    <!-- WriteLinesToFile splits on ';' — encode as %3B. One item per output line. -->
+    <ItemGroup>
+      <_BuildConstantsLine Include="// &lt;auto-generated /&gt;" />
+      <_BuildConstantsLine Include="namespace AssetBeeDrone.Updating%3B" />
+      <_BuildConstantsLine Include="internal static class BuildConstants" />
+      <_BuildConstantsLine Include="{" />
+      <_BuildConstantsLine Include="    public const string UpdateFeedUrl = &quot;$(_EscapedUpdateFeedUrl)&quot;%3B" />
+      <_BuildConstantsLine Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile
+      File="$(_BuildConstantsPath)"
+      Lines="@(_BuildConstantsLine)"
+      Overwrite="true"
+      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(_BuildConstantsPath)" KeepDuplicates="false" />
+      <FileWrites Include="$(_BuildConstantsPath)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

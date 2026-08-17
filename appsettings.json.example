@@ -10,7 +10,9 @@
     "Debug": false,
     "DebugOutputPath": "inventory-debug.json",
     "IncludeSbom": true,
-    "IncludeContainerSboms": true
+    "IncludeContainerSboms": true,
+    "AutoUpdate": true,
+    "AutoUpdateIntervalHours": 24
   },
   "Logging": {
     "LogLevel": {

@@ -57,6 +57,7 @@ jobs:
           -c Release
           -p:PublishProfile=${{ matrix.rid }}
           -p:Version=${{ env.VERSION }}
+          -p:UpdateFeedUrl=https://assetbee.software/drone/latest.json
 
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
@@ -111,10 +112,20 @@ jobs:
       # Required for keyless Sigstore (Fulcio) signing via GitHub OIDC.
       id-token: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Release version: $VERSION"
 
       - name: Stage release assets
         run: |
@@ -122,6 +133,16 @@ jobs:
           find artifacts -type f \( -name '*.msi' -o -name '*.deb' -o -name '*.rpm' -o -name '*.pkg' -o -name '*.zip' -o -name '*.tar.gz' \) \
             -exec cp {} release/ \;
           ls -la release
+
+      - name: Write auto-update manifest
+        run: |
+          chmod +x ./deploy/packaging/write-update-manifest.sh
+          ./deploy/packaging/write-update-manifest.sh \
+            --version "$VERSION" \
+            --asset-dir release \
+            --download-base "https://assetbee.software/drone" \
+            --output release/latest.json
+          cat release/latest.json
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.0.0
@@ -134,7 +155,7 @@ jobs:
           cd release
 
           shopt -s nullglob
-          assets=( *.msi *.deb *.rpm *.pkg *.zip *.tar.gz )
+          assets=( *.msi *.deb *.rpm *.pkg *.zip *.tar.gz latest.json )
           if [ "${#assets[@]}" -eq 0 ]; then
             echo "No release assets to sign" >&2
             exit 1

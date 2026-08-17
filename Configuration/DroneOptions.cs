@@ -50,7 +50,21 @@ public sealed class DroneOptions
     /// </summary>
     public bool IncludeContainerSboms { get; set; } = true;
 
+    /// <summary>
+    /// When true, periodically checks the build-time update feed and applies newer packages.
+    /// Has no effect when the binary was built without <c>UpdateFeedUrl</c>.
+    /// </summary>
+    public bool AutoUpdate { get; set; } = true;
+
+    /// <summary>
+    /// How often to check the update feed when auto-update is enabled.
+    /// </summary>
+    [Range(1, 168)]
+    public int AutoUpdateIntervalHours { get; set; } = 24;
+
     public TimeSpan CollectionInterval => TimeSpan.FromMinutes(CollectionIntervalMinutes);
 
     public TimeSpan RequestTimeout => TimeSpan.FromSeconds(RequestTimeoutSeconds);
+
+    public TimeSpan AutoUpdateInterval => TimeSpan.FromHours(AutoUpdateIntervalHours);
 }

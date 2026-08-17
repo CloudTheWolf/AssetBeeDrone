@@ -41,6 +41,8 @@ Drone__Debug=false
 Drone__DebugOutputPath=inventory-debug.json
 Drone__IncludeSbom=true
 Drone__IncludeContainerSboms=true
+Drone__AutoUpdate=true
+Drone__AutoUpdateIntervalHours=24
 ```
 
 `Drone__ApiKey` may be used instead of `Drone__BearerToken`; it is sent as
@@ -49,6 +51,28 @@ mode is enabled and the endpoint is loopback (`localhost`, `127.0.0.1`, or
 `::1`). The service posts once at startup and then at the configured interval.
 Transient HTTP failures and status codes 408, 429, and 5xx are retried with
 exponential backoff.
+
+### Auto-update
+
+When the binary is published with `-p:UpdateFeedUrl=...`, Drone periodically
+fetches that update manifest, and if a newer version is available it downloads
+the matching native package (MSI / deb / rpm / pkg), verifies the SHA-256, and
+installs it. The feed URL is baked in at build time (not `appsettings.json`).
+
+The production feed depends on how you build:
+
+- **GitHub Actions** (tagged releases): `https://assetbee.software/drone/latest.json`
+- **Jenkins** (lab): `https://assets.callcorplab.com/drone/latest.json`
+
+Disable at runtime with `Drone__AutoUpdate=false`, or change the
+check interval with `Drone__AutoUpdateIntervalHours` (1–168, default 24).
+
+Local publish example:
+
+```sh
+dotnet publish -p:PublishProfile=linux-x64 \
+  -p:UpdateFeedUrl=https://assetbee.software/drone/latest.json
+```
 
 `Drone__Type` optionally overrides asset classification with `hardware` or
 `virtualware`. When omitted, Drone checks platform virtualization signals.
@@ -134,9 +158,13 @@ Pushing to `main` runs `.github/workflows/release-packages.yml`, which publishes
 Native AOT builds and uploads packages as workflow artifacts. Pushing a `v*` tag
 also creates a GitHub Release from those artifacts. Release assets are
 **Sigstore/Cosign keyless-signed** (OIDC via GitHub Actions); each package ships
-with a `.sigstore.json` bundle plus a signed `SHA256SUMS`.
+with a `.sigstore.json` bundle plus a signed `SHA256SUMS`. Tagged releases also
+include `latest.json` with download URLs under `https://assetbee.software/drone`,
+and binaries bake `UpdateFeedUrl` to that host’s `latest.json`. Jenkins lab
+builds use `https://assets.callcorplab.com/drone` instead and perform
+Authenticode / Developer ID signing (and optional notarization)—not Sigstore.
 
-Verify a downloaded asset (replace `OWNER/REPO` and the tag):
+Verify a downloaded GitHub Release asset (replace `OWNER/REPO` and the tag):
 
 ```sh
 cosign verify-blob \
