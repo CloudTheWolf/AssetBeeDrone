@@ -1,4 +1,4 @@
-# AssetBee Drone
+# AssetBee Drone 
 
 AssetBee Drone is a .NET 10 background service that inventories Windows, Linux,
 and macOS devices and posts a versioned JSON document to an HTTPS endpoint.
