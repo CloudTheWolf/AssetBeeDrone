@@ -165,6 +165,18 @@ if ($SignThumbprint) {
     Write-Host 'Skipping Authenticode signing (pass -SignThumbprint to enable).'
 }
 
+if ($Endpoint -and $Endpoint -ne '{{ENDPOINT}}') {
+    Write-Host "Baking ENDPOINT into MSI: $Endpoint"
+} else {
+    Write-Host 'ENDPOINT not baked (silent install will require ENDPOINT=...).'
+}
+
+if ($BearerToken -and $BearerToken -ne '{{BEARER_TOKEN}}') {
+    Write-Host 'Baking BEARERTOKEN into MSI (silent /q needs no extra properties).'
+} else {
+    Write-Host 'BEARERTOKEN not baked (silent install will require BEARERTOKEN=... or APIKEY=...).'
+}
+
 # -acceptEula is required for WiX v7+ (Open Source Maintenance Fee). See https://docs.firegiant.com/wix/osmf/
 & $wixExe build `
     -acceptEula $wixEulaId `

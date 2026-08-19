@@ -67,9 +67,22 @@
 			Id="WixUILicenseRtf"
 			Value="$(var.SourceDir)\License.rtf" />
 
-		<!-- Runtime configuration -->
+		<!--
+			Runtime configuration. Jenkins (and other CI) can bake defaults via
+			build-msi.ps1 -Endpoint / -BearerToken so msiexec /q needs no extra
+			properties. Placeholders from unsigned GitHub builds stay unset.
+			Command-line ENDPOINT / BEARERTOKEN still override these values.
+		-->
+		<?if $(var.Endpoint) != "{{ENDPOINT}}" And $(var.Endpoint) != "" ?>
+		<Property Id="ENDPOINT" Secure="yes" Value="$(var.Endpoint)" />
+		<?else?>
 		<Property Id="ENDPOINT" Secure="yes" />
+		<?endif?>
+		<?if $(var.BearerToken) != "{{BEARER_TOKEN}}" And $(var.BearerToken) != "" ?>
+		<Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" Value="$(var.BearerToken)" />
+		<?else?>
 		<Property Id="BEARERTOKEN" Secure="yes" Hidden="yes" />
+		<?endif?>
 		<Property Id="APIKEY" Secure="yes" Hidden="yes" />
 		<Property Id="UNINSTALL_PRODUCTS" Secure="yes" Hidden="yes" />
 		<!-- /qn or /qb for legacy/same-version uninstall via msiexec -->
