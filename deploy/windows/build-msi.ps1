@@ -3,6 +3,8 @@ param(
     [string] $PublishDirectory,
     [string] $Version,
     [string] $OutputDirectory,
+    [string] $Endpoint = '{{ENDPOINT}}',
+    [string] $BearerToken = '{{BEARER_TOKEN}}',
     # Optional Authenticode signing (strongly recommended to reduce SmartScreen / PUP false positives).
     [string] $SignThumbprint,
     [string] $SignTimestampUrl = 'http://timestamp.digicert.com',
@@ -173,6 +175,8 @@ if ($SignThumbprint) {
     -d "Version=$Version" `
     -d "PublishDir=$PublishDirectory" `
     -d "SourceDir=$scriptDir" `
+    -d "Endpoint=$Endpoint" `
+    -d "BearerToken=$BearerToken" `
     -arch x64 `
     -o $outputMsi
 
