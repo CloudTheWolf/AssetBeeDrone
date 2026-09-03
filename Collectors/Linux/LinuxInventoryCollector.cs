@@ -777,8 +777,8 @@ public sealed partial class LinuxInventoryCollector(
             ("Qualys Cloud Agent", "qualys-cloud-agent.service"),
             ("Tanium Client", "taniumclient.service"),
             ("Kaspersky Endpoint Security", "kesl.service"),
-            ("WatchGuard EPDR / Panda Security", "management-agent.service"),
-            ("WatchGuard EPDR / Panda Security", "protection-agent.service")
+            ("WatchGuard EPDR / Panda Security Manager", "management-agent.service"),
+            ("WatchGuard EPDR / Panda Security Protection", "protection-agent.service")
         ];
 
         List<AntivirusInfo> products = [];

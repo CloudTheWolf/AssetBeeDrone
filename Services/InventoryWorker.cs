@@ -1,5 +1,6 @@
 using AssetBeeDrone.Collectors;
 using AssetBeeDrone.Configuration;
+using AssetBeeDrone.Infrastructure;
 using AssetBeeDrone.Reporting;
 using Microsoft.Extensions.Options;
 
@@ -25,6 +26,7 @@ public sealed class InventoryWorker(
     IInventoryReporter reporter,
     IOptions<DroneOptions> options,
     TimeProvider timeProvider,
+    ISystemEventLogger systemEventLogger,
     ILogger<InventoryWorker> logger) : BackgroundService, IInventorySyncController
 {
     private readonly SemaphoreSlim _runGate = new(1, 1);
@@ -125,6 +127,9 @@ public sealed class InventoryWorker(
         {
             logger.LogError(exception,
                 "Inventory collection or delivery failed; the service will retry next interval");
+            systemEventLogger.WriteError(
+                "Inventory sync failed; the service will retry next interval.",
+                exception.ToString());
             lock (_statusLock)
             {
                 _lastRunUtc = started;

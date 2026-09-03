@@ -245,6 +245,12 @@
 					RestartServiceDelayInSeconds="15"
 					ResetPeriodInDays="1" />
 
+				<!-- Lets Event Viewer resolve sync-failure entries from the service. -->
+				<util:EventSource
+					Name="AssetBee Drone"
+					Log="Application"
+					EventMessageFile="[#DroneExe]" />
+
 			</Component>
 
 			<Component

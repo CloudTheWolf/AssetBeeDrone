@@ -34,13 +34,17 @@ public sealed class InventoryWorkerSyncTests
         StubTimeProvider time = new(DateTimeOffset.Parse("2026-01-01T12:00:00Z"));
         FakeCollector collector = new();
         FakeReporter reporter = new() { Exception = new InvalidOperationException("boom") };
-        InventoryWorker worker = CreateWorker(collector, reporter, time);
+        RecordingSystemEventLogger events = new();
+        InventoryWorker worker = CreateWorker(collector, reporter, time, events);
 
         InventorySyncStatus status = await worker.RequestSyncAsync(CancellationToken.None);
 
         Assert.Equal("boom", status.LastError);
         Assert.NotNull(status.LastRunUtc);
         Assert.Null(status.LastSuccessUtc);
+        Assert.Single(events.Entries);
+        Assert.Contains("Inventory sync failed", events.Entries[0].Title);
+        Assert.Contains("boom", events.Entries[0].Details);
     }
 
     [Fact]
@@ -132,7 +136,8 @@ public sealed class InventoryWorkerSyncTests
     private static InventoryWorker CreateWorker(
         IDeviceInventoryCollector collector,
         IInventoryReporter reporter,
-        TimeProvider time) =>
+        TimeProvider time,
+        ISystemEventLogger? systemEventLogger = null) =>
         new(
             collector,
             new FakeClassifier(),
@@ -143,7 +148,23 @@ public sealed class InventoryWorkerSyncTests
                 CollectionIntervalMinutes = 60
             }),
             time,
+            systemEventLogger ?? new NoOpSystemEventLogger(),
             NullLogger<InventoryWorker>.Instance);
+
+    private sealed class NoOpSystemEventLogger : ISystemEventLogger
+    {
+        public void WriteError(string title, string details)
+        {
+        }
+    }
+
+    private sealed class RecordingSystemEventLogger : ISystemEventLogger
+    {
+        public List<(string Title, string Details)> Entries { get; } = [];
+
+        public void WriteError(string title, string details) =>
+            Entries.Add((title, details));
+    }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {

@@ -20,6 +20,7 @@ builder.Services.AddSingleton<IValidateOptions<DroneOptions>, DroneOptionsValida
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IProcessRunner, ProcessRunner>();
+builder.Services.AddSingleton<ISystemEventLogger, SystemEventLogger>();
 builder.Services.AddSingleton<IAssetClassificationService, AssetClassificationService>();
 builder.Services.AddSingleton<IDeviceInventoryCollector>(_ =>
 {
