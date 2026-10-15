@@ -12,7 +12,8 @@ and macOS devices and posts a versioned JSON document to an HTTPS endpoint.
   partition names such as `nvme0n1p1`, excluding loop devices and virtual
   filesystems like tmpfs/overlay/squashfs)
 - BitLocker, LUKS/dm-crypt, or FileVault state
-- Windows BitLocker numerical recovery passwords and their key protector IDs
+- Windows BitLocker protection status, numerical recovery passwords, and key
+  protector IDs
 - AD/Entra/workplace, realmd/SSSD, Apple AD, and MDM workspace state
 - Built-in login systems plus GCPW, Jamf Connect, XCreds, NoMAD, SSSD, and LDAP
 - Windows Security Center products, Gatekeeper/XProtect, and recognized
@@ -240,7 +241,7 @@ the connection settings. The legacy 1.0.0 MSI had an uninstall launch-condition
 bug, so upgrade that release through the full installer UI; the compatibility
 flow removes it before installing the new version.
 
-The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time and choose **Sync Now**. Exit closes only the tray helper; the `AssetBeeDrone` service keeps running. The tray talks to the service through `%ProgramData%\AssetBee\Drone\` (status heartbeat + sync request files).
+The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time, choose **Sync Now**, or open **How to enable encryption…** for a BitLocker walkthrough (including opening Windows BitLocker settings). Exit closes only the tray helper; the `AssetBeeDrone` service keeps running. The tray talks to the service through `%ProgramData%\AssetBee\Drone\` (status heartbeat + sync request files).
 
 **Portable archive / publish folder**
 

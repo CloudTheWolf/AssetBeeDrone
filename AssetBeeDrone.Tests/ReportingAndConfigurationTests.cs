@@ -32,6 +32,7 @@ public sealed class ReportingAndConfigurationTests
 
         Assert.Equal(2, handler.RequestCount);
         Assert.Contains(RecoveryKey, handler.LastBody);
+        Assert.Contains("\"protectionStatus\":\"On\"", handler.LastBody);
         Assert.Contains("\"type\":\"hardware\"", handler.LastBody);
         Assert.Contains("\"hardwareType\"", handler.LastBody);
         Assert.DoesNotContain(logger.Messages, message => message.Contains(RecoveryKey));
@@ -136,7 +137,8 @@ public sealed class ReportingAndConfigurationTests
                 "BitLocker",
                 "encrypted",
                 [RecoveryKey],
-                [new BitLockerKeyProtector("{11111111-2222-3333-4444-555555555555}", RecoveryKey)])
+                [new BitLockerKeyProtector("{11111111-2222-3333-4444-555555555555}", RecoveryKey)],
+                "On")
         ]),
         ProbeValue<DomainWorkspaceInfo>.Available(
             new DomainWorkspaceInfo(null, false, null, false)),

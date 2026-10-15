@@ -13,7 +13,7 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <Description>AssetBee Drone notification-area companion for sync status, updates, and About.</Description>
+    <Description>AssetBee Drone notification-area companion for sync status, updates, encryption guidance, and About.</Description>
   </PropertyGroup>
 
   <ItemGroup>

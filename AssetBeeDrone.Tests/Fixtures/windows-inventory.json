@@ -29,6 +29,7 @@
     {
       "MountPoint": "C:",
       "Status": "FullyEncrypted",
+      "ProtectionStatus": "On",
       "RecoveryKeys": ["111111-222222-333333-444444-555555-666666-777777-888888"],
       "KeyProtectors": [
         {
@@ -36,6 +37,13 @@
           "RecoveryKey": "111111-222222-333333-444444-555555-666666-777777-888888"
         }
       ]
+    },
+    {
+      "MountPoint": "D:",
+      "Status": "FullyEncrypted",
+      "ProtectionStatus": "On",
+      "RecoveryKeys": [],
+      "KeyProtectors": []
     }
   ],
   "BitLockerAvailable": true,

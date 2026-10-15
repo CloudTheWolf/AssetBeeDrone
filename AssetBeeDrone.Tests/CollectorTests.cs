@@ -90,6 +90,11 @@ public sealed class CollectorTests
         Assert.Equal(
             inventory.DiskEncryption.Value[0].RecoveryKeys![0],
             inventory.DiskEncryption.Value[0].KeyProtectors![0].RecoveryKey);
+        Assert.Equal("FullyEncrypted", inventory.DiskEncryption.Value[0].State);
+        Assert.Equal("On", inventory.DiskEncryption.Value[0].ProtectionStatus);
+        Assert.Equal("TPM Only (No Key)", inventory.DiskEncryption.Value[1].State);
+        Assert.Empty(inventory.DiskEncryption.Value[1].RecoveryKeys!);
+        Assert.Equal("On", inventory.DiskEncryption.Value[1].ProtectionStatus);
         Assert.Equal("KB5034441", inventory.Updates.Value!.Installed[0].Id);
         Assert.Equal("update-1", inventory.Updates.Value.Available[0].Id);
         Assert.Equal(ProbeStatus.Available, inventory.Sbom.Status);

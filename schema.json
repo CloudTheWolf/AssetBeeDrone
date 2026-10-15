@@ -219,6 +219,7 @@
         "volume": { "type": "string" },
         "technology": { "type": "string" },
         "state": { "type": "string" },
+        "protectionStatus": { "type": ["string", "null"] },
         "recoveryKeys": {
           "oneOf": [
             { "type": "array", "items": { "type": "string" } },

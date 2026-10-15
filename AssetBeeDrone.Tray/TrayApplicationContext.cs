@@ -17,6 +17,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _syncNowItem;
     private readonly ToolStripMenuItem _checkUpdatesItem;
     private readonly ToolStripMenuItem _installUpdateItem;
+    private readonly ToolStripMenuItem _encryptionGuideItem;
     private readonly ToolStripMenuItem _aboutItem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private readonly DateTimeOffset _startedUtc = DateTimeOffset.UtcNow;
@@ -39,6 +40,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Visible = false,
             Enabled = false
         };
+        _encryptionGuideItem = new ToolStripMenuItem(
+            "How to enable encryption…",
+            null,
+            (_, _) => EncryptionGuideForm.ShowGuide());
         _aboutItem = new ToolStripMenuItem("About", null, (_, _) => ShowAbout());
 
         ContextMenuStrip menu = new();
@@ -48,6 +53,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_checkUpdatesItem);
         menu.Items.Add(_installUpdateItem);
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(_encryptionGuideItem);
         menu.Items.Add(_aboutItem);
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitTray()));
         menu.Opening += (_, _) => RefreshStatus();

@@ -255,15 +255,32 @@ public sealed partial class WindowsInventoryCollector(
                 }
             }
 
+            string? protectionStatus = GetString(volume, "ProtectionStatus");
+            string status = GetString(volume, "Status") ?? "Unknown";
+            string state = recoveryKeys.Count == 0 && IsBitLockerProtectedOrEncrypted(status, protectionStatus)
+                ? "TPM Only (No Key)"
+                : status;
+
             volumes.Add(new EncryptionVolume(
                 GetString(volume, "MountPoint") ?? "Unknown",
                 "BitLocker",
-                GetString(volume, "Status") ?? "Unknown",
+                state,
                 recoveryKeys,
-                keyProtectors));
+                keyProtectors,
+                protectionStatus));
         }
 
         return ProbeValue<IReadOnlyList<EncryptionVolume>>.Available(volumes);
+    }
+
+    private static bool IsBitLockerProtectedOrEncrypted(string status, string? protectionStatus)
+    {
+        if (string.Equals(protectionStatus, "On", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return status.Contains("Encrypt", StringComparison.OrdinalIgnoreCase);
     }
 
     private static ProbeValue<DomainWorkspaceInfo> ParseDomain(JsonElement root)
@@ -382,21 +399,96 @@ public sealed partial class WindowsInventoryCollector(
         })
         $encryption = @()
         $bitLockerAvailable = $false
+        function Test-IsRecoveryPasswordProtector {
+            param($Protector)
+            if ($null -eq $Protector) { return $false }
+            $type = $Protector.KeyProtectorType
+            if ($null -eq $type) { return $false }
+            $name = [string]$type
+            if ($name -eq 'RecoveryPassword' -or $name -eq 'NumericalPassword') { return $true }
+            try { return ([int]$type) -eq 3 } catch { return $false }
+        }
+        function Get-CimRecoveryProtectors {
+            param([string]$MountPoint)
+            $results = @()
+            if ([string]::IsNullOrWhiteSpace($MountPoint)) { return $results }
+            $letter = $MountPoint.TrimEnd('\').ToUpperInvariant()
+            try {
+                $cimVolume = Get-CimInstance `
+                    -Namespace 'root/cimv2/Security/MicrosoftVolumeEncryption' `
+                    -ClassName Win32_EncryptableVolume `
+                    -ErrorAction Stop |
+                    Where-Object {
+                        -not [string]::IsNullOrWhiteSpace($_.DriveLetter) -and
+                        $_.DriveLetter.TrimEnd('\').ToUpperInvariant() -eq $letter
+                    } |
+                    Select-Object -First 1
+                if (-not $cimVolume) { return $results }
+                $protectorResult = $cimVolume | Invoke-CimMethod -MethodName GetKeyProtectors
+                if ($protectorResult.ReturnValue -ne 0) { return $results }
+                foreach ($id in @($protectorResult.VolumeKeyProtectorID)) {
+                    if ([string]::IsNullOrWhiteSpace($id)) { continue }
+                    $typeResult = $cimVolume | Invoke-CimMethod `
+                        -MethodName GetKeyProtectorType `
+                        -Arguments @{ VolumeKeyProtectorID = $id }
+                    if ($typeResult.ReturnValue -ne 0 -or [int]$typeResult.KeyProtectorType -ne 3) {
+                        continue
+                    }
+                    $passwordResult = $cimVolume | Invoke-CimMethod `
+                        -MethodName GetKeyProtectorNumericalPassword `
+                        -Arguments @{ VolumeKeyProtectorID = $id }
+                    $password = $null
+                    if ($passwordResult.ReturnValue -eq 0) {
+                        $password = [string]$passwordResult.NumericalPassword
+                    }
+                    if ([string]::IsNullOrWhiteSpace($password)) { $password = $null }
+                    $results += [pscustomobject]@{
+                        KeyProtectorId = [string]$id
+                        RecoveryKey = $password
+                    }
+                }
+            } catch {}
+            return $results
+        }
         try {
             $encryption = @(Get-BitLockerVolume | ForEach-Object {
+                $mountPoint = [string]$_.MountPoint
                 $recoveryProtectors = @($_.KeyProtector |
-                    Where-Object KeyProtectorType -eq 'RecoveryPassword')
-                $keys = @($recoveryProtectors |
-                    ForEach-Object { $_.RecoveryPassword } | Where-Object { $_ })
+                    Where-Object { Test-IsRecoveryPasswordProtector $_ })
                 $protectors = @($recoveryProtectors | ForEach-Object {
+                    $password = [string]$_.RecoveryPassword
+                    if ([string]::IsNullOrWhiteSpace($password)) { $password = $null }
                     [pscustomobject]@{
-                        KeyProtectorId = $_.KeyProtectorId
-                        RecoveryKey = $_.RecoveryPassword
+                        KeyProtectorId = [string]$_.KeyProtectorId
+                        RecoveryKey = $password
                     }
                 })
+                $keys = @($protectors |
+                    ForEach-Object { $_.RecoveryKey } |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+                if ($keys.Count -eq 0) {
+                    $cimProtectors = @(Get-CimRecoveryProtectors -MountPoint $mountPoint)
+                    if ($cimProtectors.Count -gt 0) {
+                        $merged = @{}
+                        foreach ($protector in @($protectors + $cimProtectors)) {
+                            if ([string]::IsNullOrWhiteSpace($protector.KeyProtectorId)) { continue }
+                            $existing = $merged[$protector.KeyProtectorId]
+                            if ($null -eq $existing -or
+                                ([string]::IsNullOrWhiteSpace($existing.RecoveryKey) -and
+                                 -not [string]::IsNullOrWhiteSpace($protector.RecoveryKey))) {
+                                $merged[$protector.KeyProtectorId] = $protector
+                            }
+                        }
+                        $protectors = @($merged.Values)
+                        $keys = @($protectors |
+                            ForEach-Object { $_.RecoveryKey } |
+                            Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+                    }
+                }
                 [pscustomobject]@{
-                    MountPoint = $_.MountPoint
+                    MountPoint = $mountPoint
                     Status = [string]$_.VolumeStatus
+                    ProtectionStatus = [string]$_.ProtectionStatus
                     RecoveryKeys = $keys
                     KeyProtectors = $protectors
                 }

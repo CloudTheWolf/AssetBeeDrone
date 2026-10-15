@@ -44,7 +44,8 @@ public sealed record EncryptionVolume(
     string Technology,
     string State,
     IReadOnlyList<string>? RecoveryKeys = null,
-    IReadOnlyList<BitLockerKeyProtector>? KeyProtectors = null);
+    IReadOnlyList<BitLockerKeyProtector>? KeyProtectors = null,
+    string? ProtectionStatus = null);
 
 public sealed record OperatingSystemInfo(
     string Name,
