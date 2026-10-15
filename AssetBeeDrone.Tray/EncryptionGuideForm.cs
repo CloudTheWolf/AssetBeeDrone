@@ -6,6 +6,11 @@ internal sealed class EncryptionGuideForm : Form
 {
     private static EncryptionGuideForm? _openInstance;
 
+    private readonly Label _statusLabel;
+    private readonly Button _refreshButton;
+    private CancellationTokenSource? _probeCts;
+    private bool _probeInFlight;
+
     private EncryptionGuideForm()
     {
         Text = "Enable full disk encryption";
@@ -14,18 +19,37 @@ internal sealed class EncryptionGuideForm : Form
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         ShowInTaskbar = true;
-        ClientSize = new Size(520, 460);
+        ClientSize = new Size(540, 560);
         Font = SystemFonts.MessageBoxFont;
         Padding = new Padding(16);
 
         Label heading = new()
         {
             AutoSize = false,
-            Dock = DockStyle.Top,
-            Height = 36,
+            Dock = DockStyle.Fill,
             Text = "BitLocker step-by-step",
             Font = new Font(Font.FontFamily, Font.Size + 2f, FontStyle.Bold),
             TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        Label statusHeading = new()
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            Text = "Current status",
+            Font = new Font(Font, FontStyle.Bold),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        _statusLabel = new Label
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            BorderStyle = BorderStyle.FixedSingle,
+            Padding = new Padding(8),
+            Text = "Reading BitLocker status…",
+            TextAlign = ContentAlignment.TopLeft,
+            UseMnemonic = false
         };
 
         TextBox guide = new()
@@ -37,42 +61,71 @@ internal sealed class EncryptionGuideForm : Form
             ScrollBars = ScrollBars.Vertical,
             BackColor = SystemColors.Window,
             Text = BuildGuideText(),
-            TabStop = false
+            TabStop = true
         };
+
+        _refreshButton = new Button
+        {
+            Text = "Refresh status",
+            AutoSize = true,
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        _refreshButton.Click += async (_, _) => await RefreshStatusAsync();
 
         Button openSettings = new()
         {
             Text = "Open BitLocker settings",
             AutoSize = true,
-            Anchor = AnchorStyles.Left
+            Margin = new Padding(0, 0, 8, 0)
         };
         openSettings.Click += (_, _) => OpenBitLockerSettings();
 
         Button close = new()
         {
             Text = "Close",
-            DialogResult = DialogResult.OK,
             AutoSize = true,
-            Anchor = AnchorStyles.Right
+            Margin = new Padding(0)
         };
+        close.Click += (_, _) => Close();
         AcceptButton = close;
         CancelButton = close;
 
         FlowLayoutPanel buttons = new()
         {
-            Dock = DockStyle.Bottom,
+            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
-            Height = 44,
-            Padding = new Padding(0, 12, 0, 0),
-            WrapContents = false
+            WrapContents = false,
+            Padding = new Padding(0, 8, 0, 0)
         };
         buttons.Controls.Add(close);
         buttons.Controls.Add(openSettings);
+        buttons.Controls.Add(_refreshButton);
 
-        // Docking applies in reverse z-order: fill first, then edges.
-        Controls.Add(guide);
-        Controls.Add(buttons);
-        Controls.Add(heading);
+        TableLayoutPanel root = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 5
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        root.Controls.Add(heading, 0, 0);
+        root.Controls.Add(statusHeading, 0, 1);
+        root.Controls.Add(_statusLabel, 0, 2);
+        root.Controls.Add(guide, 0, 3);
+        root.Controls.Add(buttons, 0, 4);
+
+        Controls.Add(root);
+        Shown += async (_, _) => await RefreshStatusAsync();
+        FormClosed += (_, _) =>
+        {
+            _probeCts?.Cancel();
+            _probeCts?.Dispose();
+            _probeCts = null;
+        };
     }
 
     public static void ShowGuide()
@@ -85,6 +138,7 @@ internal sealed class EncryptionGuideForm : Form
             }
 
             _openInstance.Activate();
+            _ = _openInstance.RefreshStatusAsync();
             return;
         }
 
@@ -98,6 +152,47 @@ internal sealed class EncryptionGuideForm : Form
             }
         };
         form.Show();
+    }
+
+    private async Task RefreshStatusAsync()
+    {
+        if (IsDisposed || _probeInFlight)
+        {
+            return;
+        }
+
+        _probeInFlight = true;
+        _refreshButton.Enabled = false;
+        _statusLabel.Text = "Reading BitLocker status…";
+
+        _probeCts?.Cancel();
+        _probeCts?.Dispose();
+        _probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        try
+        {
+            (IReadOnlyList<BitLockerVolumeStatus>? volumes, string? error) =
+                await BitLockerStatusProbe.ProbeAsync(_probeCts.Token);
+            if (!IsDisposed)
+            {
+                _statusLabel.Text = BitLockerStatusProbe.FormatStatus(volumes, error);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (!IsDisposed)
+            {
+                _statusLabel.Text = "Timed out while reading BitLocker status.";
+            }
+        }
+        finally
+        {
+            _probeInFlight = false;
+            if (!IsDisposed)
+            {
+                _refreshButton.Enabled = true;
+            }
+        }
     }
 
     private static string BuildGuideText() =>
