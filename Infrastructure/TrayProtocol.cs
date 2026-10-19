@@ -17,10 +17,16 @@ public sealed record TrayStatusResponse(
     bool QuitTray = false,
     string? ServiceVersion = null,
     DateTimeOffset? LastUpdateCheckUtc = null,
-    string? LastUpdateCheckMessage = null);
+    string? LastUpdateCheckMessage = null,
+    IReadOnlyList<TrayBitLockerVolume>? BitLockerVolumes = null,
+    DateTimeOffset? BitLockerStatusUtc = null,
+    string? BitLockerStatusDetail = null,
+    bool BitLockerRefreshing = false);
 
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(TrayStatusResponse))]
+[JsonSerializable(typeof(TrayBitLockerVolume))]
+[JsonSerializable(typeof(IReadOnlyList<TrayBitLockerVolume>))]
 public sealed partial class TrayJsonContext : JsonSerializerContext;

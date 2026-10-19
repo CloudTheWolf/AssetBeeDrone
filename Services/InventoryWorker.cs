@@ -27,6 +27,7 @@ public sealed class InventoryWorker(
     IOptions<DroneOptions> options,
     TimeProvider timeProvider,
     ISystemEventLogger systemEventLogger,
+    IBitLockerStatusService bitLockerStatusService,
     ILogger<InventoryWorker> logger) : BackgroundService, IInventorySyncController
 {
     private readonly SemaphoreSlim _runGate = new(1, 1);
@@ -104,6 +105,7 @@ public sealed class InventoryWorker(
             AssetClassification classification =
                 await classificationService.ClassifyAsync(cancellationToken);
             var inventory = await collector.CollectAsync(cancellationToken);
+            bitLockerStatusService.UpdateFromInventory(inventory.DiskEncryption);
             await reporter.ReportAsync(
                 inventory with
                 {

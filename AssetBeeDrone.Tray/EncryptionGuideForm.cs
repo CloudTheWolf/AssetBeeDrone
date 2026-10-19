@@ -4,12 +4,14 @@ namespace AssetBeeDrone.Tray;
 
 internal sealed class EncryptionGuideForm : Form
 {
+    private static readonly TimeSpan ServiceAliveMaxAge = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan RefreshTimeout = TimeSpan.FromSeconds(45);
     private static EncryptionGuideForm? _openInstance;
 
     private readonly Label _statusLabel;
     private readonly Button _refreshButton;
-    private CancellationTokenSource? _probeCts;
-    private bool _probeInFlight;
+    private CancellationTokenSource? _refreshCts;
+    private bool _refreshInFlight;
 
     private EncryptionGuideForm()
     {
@@ -47,7 +49,7 @@ internal sealed class EncryptionGuideForm : Form
             Dock = DockStyle.Fill,
             BorderStyle = BorderStyle.FixedSingle,
             Padding = new Padding(8),
-            Text = "Reading BitLocker status…",
+            Text = "Waiting for AssetBee service…",
             TextAlign = ContentAlignment.TopLeft,
             UseMnemonic = false
         };
@@ -109,7 +111,7 @@ internal sealed class EncryptionGuideForm : Form
         };
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         root.Controls.Add(heading, 0, 0);
@@ -122,9 +124,9 @@ internal sealed class EncryptionGuideForm : Form
         Shown += async (_, _) => await RefreshStatusAsync();
         FormClosed += (_, _) =>
         {
-            _probeCts?.Cancel();
-            _probeCts?.Dispose();
-            _probeCts = null;
+            _refreshCts?.Cancel();
+            _refreshCts?.Dispose();
+            _refreshCts = null;
         };
     }
 
@@ -156,43 +158,116 @@ internal sealed class EncryptionGuideForm : Form
 
     private async Task RefreshStatusAsync()
     {
-        if (IsDisposed || _probeInFlight)
+        if (IsDisposed || _refreshInFlight)
         {
             return;
         }
 
-        _probeInFlight = true;
+        _refreshInFlight = true;
         _refreshButton.Enabled = false;
-        _statusLabel.Text = "Reading BitLocker status…";
 
-        _probeCts?.Cancel();
-        _probeCts?.Dispose();
-        _probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        _refreshCts?.Cancel();
+        _refreshCts?.Dispose();
+        _refreshCts = new CancellationTokenSource(RefreshTimeout);
+        CancellationToken cancellationToken = _refreshCts.Token;
 
         try
         {
-            (IReadOnlyList<BitLockerVolumeStatus>? volumes, string? error) =
-                await BitLockerStatusProbe.ProbeAsync(_probeCts.Token);
-            if (!IsDisposed)
+            TrayStatusResponse? before = TrayFileIpcClient.ReadStatus();
+            bool alive = before is not null &&
+                         TrayFileIpcClient.IsServiceAlive(before, ServiceAliveMaxAge);
+            ApplyStatus(before, alive);
+
+            if (!alive)
             {
-                _statusLabel.Text = BitLockerStatusProbe.FormatStatus(volumes, error);
+                return;
             }
+
+            DateTimeOffset? priorUtc = before?.BitLockerStatusUtc;
+            bool priorRefreshing = before?.BitLockerRefreshing == true;
+            TrayFileIpcClient.RequestBitLockerStatus();
+            _statusLabel.Text = "Reading BitLocker status from the AssetBee service…";
+
+            TrayStatusResponse? after = await WaitForBitLockerUpdateAsync(priorUtc, priorRefreshing, cancellationToken);
+            bool afterAlive = after is not null &&
+                              TrayFileIpcClient.IsServiceAlive(after, ServiceAliveMaxAge);
+            ApplyStatus(after ?? TrayFileIpcClient.ReadStatus(), afterAlive);
         }
         catch (OperationCanceledException)
         {
             if (!IsDisposed)
             {
-                _statusLabel.Text = "Timed out while reading BitLocker status.";
+                TrayStatusResponse? status = TrayFileIpcClient.ReadStatus();
+                bool alive = status is not null &&
+                             TrayFileIpcClient.IsServiceAlive(status, ServiceAliveMaxAge);
+                if (alive && status?.BitLockerVolumes is { Count: > 0 })
+                {
+                    ApplyStatus(status, alive);
+                }
+                else
+                {
+                    _statusLabel.Text = "Timed out waiting for BitLocker status from the AssetBee service.";
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            if (!IsDisposed)
+            {
+                _statusLabel.Text = "Could not refresh BitLocker status." + Environment.NewLine + exception.Message;
             }
         }
         finally
         {
-            _probeInFlight = false;
+            _refreshInFlight = false;
             if (!IsDisposed)
             {
                 _refreshButton.Enabled = true;
             }
         }
+    }
+
+    private void ApplyStatus(TrayStatusResponse? status, bool serviceAlive)
+    {
+        if (!IsDisposed)
+        {
+            _statusLabel.Text = BitLockerStatusDisplay.Format(status, serviceAlive);
+        }
+    }
+
+    private static async Task<TrayStatusResponse?> WaitForBitLockerUpdateAsync(
+        DateTimeOffset? priorUtc,
+        bool priorRefreshing,
+        CancellationToken cancellationToken)
+    {
+        bool sawRefreshing = priorRefreshing;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(250, cancellationToken);
+            TrayStatusResponse? status = TrayFileIpcClient.ReadStatus();
+            if (status is null || !TrayFileIpcClient.IsServiceAlive(status, ServiceAliveMaxAge))
+            {
+                continue;
+            }
+
+            if (status.BitLockerRefreshing)
+            {
+                sawRefreshing = true;
+                continue;
+            }
+
+            if (status.BitLockerStatusUtc is null)
+            {
+                continue;
+            }
+
+            if (priorUtc is null || status.BitLockerStatusUtc > priorUtc || sawRefreshing)
+            {
+                return status;
+            }
+        }
+
+        return TrayFileIpcClient.ReadStatus();
     }
 
     private static string BuildGuideText() =>
@@ -233,6 +308,9 @@ internal sealed class EncryptionGuideForm : Form
         Device Encryption (Settings → Privacy & security → Device encryption)
         on some PCs is similar; turn it on, then still confirm a recovery key
         exists under Manage BitLocker.
+
+        The status above is read by the AssetBee Drone service (LocalSystem),
+        not by this tray app.
         """.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
 
     private static void OpenBitLockerSettings()

@@ -31,6 +31,8 @@ internal static class TrayFileIpcClient
 
     public static string CheckUpdateRequestPath => Path.Combine(GetDirectoryPath(), "checkupdate.request");
 
+    public static string BitLockerRequestPath => Path.Combine(GetDirectoryPath(), "bitlocker.request");
+
     public static TrayStatusResponse? ReadStatus()
     {
         string path = StatusPath;
@@ -63,6 +65,11 @@ internal static class TrayFileIpcClient
         WriteRequest(CheckUpdateRequestPath);
     }
 
+    public static void RequestBitLockerStatus()
+    {
+        WriteRequest(BitLockerRequestPath);
+    }
+
     public static bool IsServiceAlive(TrayStatusResponse status, TimeSpan maxAge)
     {
         if (status.ServiceAliveUtc is null)
@@ -81,6 +88,12 @@ internal static class TrayFileIpcClient
     }
 }
 
+internal sealed record TrayBitLockerVolume(
+    string Volume,
+    string State,
+    string? ProtectionStatus,
+    bool HasRecoveryKey);
+
 internal sealed record TrayStatusResponse(
     DateTimeOffset? LastRunUtc,
     DateTimeOffset? LastSuccessUtc,
@@ -96,4 +109,8 @@ internal sealed record TrayStatusResponse(
     bool QuitTray = false,
     string? ServiceVersion = null,
     DateTimeOffset? LastUpdateCheckUtc = null,
-    string? LastUpdateCheckMessage = null);
+    string? LastUpdateCheckMessage = null,
+    IReadOnlyList<TrayBitLockerVolume>? BitLockerVolumes = null,
+    DateTimeOffset? BitLockerStatusUtc = null,
+    string? BitLockerStatusDetail = null,
+    bool BitLockerRefreshing = false);

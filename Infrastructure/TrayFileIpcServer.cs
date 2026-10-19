@@ -13,6 +13,7 @@ public static class TrayIpcPaths
     public const string SyncRequestFileName = "sync.request";
     public const string InstallRequestFileName = "install.request";
     public const string CheckUpdateRequestFileName = "checkupdate.request";
+    public const string BitLockerRequestFileName = "bitlocker.request";
 
     public static string GetDirectoryPath()
     {
@@ -33,6 +34,9 @@ public static class TrayIpcPaths
 
     public static string CheckUpdateRequestPath =>
         Path.Combine(GetDirectoryPath(), CheckUpdateRequestFileName);
+
+    public static string BitLockerRequestPath =>
+        Path.Combine(GetDirectoryPath(), BitLockerRequestFileName);
 }
 
 /// <summary>
@@ -43,6 +47,7 @@ public sealed class TrayFileIpcServer(
     IInventorySyncController syncController,
     IUpdateCoordinator? updateCoordinator,
     IUpdateCheckController? updateCheckController,
+    IBitLockerStatusService bitLockerStatusService,
     TimeProvider timeProvider,
     ILogger<TrayFileIpcServer> logger) : BackgroundService
 {
@@ -79,6 +84,7 @@ public sealed class TrayFileIpcServer(
                 await ProcessSyncRequestAsync(stoppingToken);
                 await ProcessCheckUpdateRequestAsync(stoppingToken);
                 await ProcessInstallRequestAsync(stoppingToken);
+                await ProcessBitLockerRequestAsync(stoppingToken);
                 await WriteStatusAsync(syncController.GetStatus(), message: null, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -120,6 +126,61 @@ public sealed class TrayFileIpcServer(
 
         await WriteStatusAsync(current with { Busy = true, Running = true }, "Sync started.", cancellationToken);
         _ = RunSyncInBackgroundAsync();
+    }
+
+    private async Task ProcessBitLockerRequestAsync(CancellationToken cancellationToken)
+    {
+        string requestPath = TrayIpcPaths.BitLockerRequestPath;
+        if (!File.Exists(requestPath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(requestPath);
+        }
+        catch (IOException)
+        {
+            return;
+        }
+
+        if (bitLockerStatusService.GetSnapshot().Refreshing)
+        {
+            await WriteStatusAsync(syncController.GetStatus(), "BitLocker status refresh already in progress.", cancellationToken);
+            return;
+        }
+
+        await WriteStatusAsync(syncController.GetStatus(), "Reading BitLocker status…", cancellationToken);
+        _ = RunBitLockerRefreshInBackgroundAsync();
+    }
+
+    private async Task RunBitLockerRefreshInBackgroundAsync()
+    {
+        try
+        {
+            await bitLockerStatusService.RefreshAsync(_appStopping);
+            await WriteStatusAsync(syncController.GetStatus(), "BitLocker status updated.", _appStopping);
+            logger.LogInformation("Tray-triggered BitLocker status refresh completed");
+        }
+        catch (OperationCanceledException) when (_appStopping.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Tray-triggered BitLocker status refresh failed");
+            try
+            {
+                await WriteStatusAsync(
+                    syncController.GetStatus(),
+                    $"BitLocker status refresh failed: {exception.Message}",
+                    _appStopping);
+            }
+            catch
+            {
+                // Ignore secondary status write failures.
+            }
+        }
     }
 
     private async Task ProcessCheckUpdateRequestAsync(CancellationToken cancellationToken)
@@ -314,6 +375,7 @@ public sealed class TrayFileIpcServer(
             (update.State is UpdateInstallState.Available or UpdateInstallState.Failed &&
              !string.IsNullOrWhiteSpace(update.Version)));
 
+        BitLockerStatusSnapshot bitLocker = bitLockerStatusService.GetSnapshot();
         TrayStatusResponse response = new(
             status.LastRunUtc,
             status.LastSuccessUtc,
@@ -331,7 +393,11 @@ public sealed class TrayFileIpcServer(
             QuitTray: update?.QuitTray == true,
             ServiceVersion: AppVersion.Current.ToString(),
             LastUpdateCheckUtc: updateCheckController?.LastCheckUtc ?? _fallbackLastCheckUtc,
-            LastUpdateCheckMessage: updateCheckController?.LastCheckMessage ?? _fallbackLastCheckMessage);
+            LastUpdateCheckMessage: updateCheckController?.LastCheckMessage ?? _fallbackLastCheckMessage,
+            BitLockerVolumes: bitLocker.Volumes,
+            BitLockerStatusUtc: bitLocker.CollectedAtUtc,
+            BitLockerStatusDetail: bitLocker.Detail,
+            BitLockerRefreshing: bitLocker.Refreshing);
 
         string json = JsonSerializer.Serialize(response, TrayJsonContext.Default.TrayStatusResponse);
         string path = TrayIpcPaths.StatusPath;

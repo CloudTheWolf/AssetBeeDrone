@@ -133,6 +133,77 @@ public sealed class InventoryWorkerSyncTests
         Assert.False(parsed.QuitTray);
     }
 
+    [Fact]
+    public void Tray_status_json_includes_bitlocker_fields()
+    {
+        TrayStatusResponse response = new(
+            DateTimeOffset.Parse("2026-01-01T12:00:00Z"),
+            DateTimeOffset.Parse("2026-01-01T12:01:00Z"),
+            null,
+            Running: false,
+            Busy: false,
+            Message: null,
+            ServiceAliveUtc: DateTimeOffset.Parse("2026-01-01T12:02:00Z"),
+            BitLockerVolumes:
+            [
+                new TrayBitLockerVolume("C:", "FullyEncrypted", "On", true),
+                new TrayBitLockerVolume("D:", "TPM Only (No Key)", "On", false)
+            ],
+            BitLockerStatusUtc: DateTimeOffset.Parse("2026-01-01T12:04:00Z"),
+            BitLockerStatusDetail: null,
+            BitLockerRefreshing: false);
+
+        string json = System.Text.Json.JsonSerializer.Serialize(
+            response,
+            TrayJsonContext.Default.TrayStatusResponse);
+        Assert.Contains("\"bitLockerVolumes\"", json);
+        Assert.Contains("\"TPM Only (No Key)\"", json);
+        Assert.Contains("\"hasRecoveryKey\":true", json);
+        Assert.Contains("\"bitLockerStatusUtc\"", json);
+
+        TrayStatusResponse? parsed = System.Text.Json.JsonSerializer.Deserialize(
+            json,
+            TrayJsonContext.Default.TrayStatusResponse);
+        Assert.Equal(2, parsed!.BitLockerVolumes!.Count);
+        Assert.Equal("C:", parsed.BitLockerVolumes[0].Volume);
+        Assert.True(parsed.BitLockerVolumes[0].HasRecoveryKey);
+        Assert.Equal("TPM Only (No Key)", parsed.BitLockerVolumes[1].State);
+        Assert.False(parsed.BitLockerVolumes[1].HasRecoveryKey);
+    }
+
+    [Fact]
+    public void BitLocker_status_service_maps_inventory_without_recovery_secrets()
+    {
+        WindowsBitLockerStatusService service = new(
+            new ThrowingProcessRunner(),
+            new StubTimeProvider(DateTimeOffset.Parse("2026-01-01T12:00:00Z")));
+
+        service.UpdateFromInventory(ProbeValue<IReadOnlyList<EncryptionVolume>>.Available(
+        [
+            new EncryptionVolume(
+                "C:",
+                "BitLocker",
+                "FullyEncrypted",
+                ["111111-222222-333333-444444-555555-666666-777777-888888"],
+                [new BitLockerKeyProtector("{id}", "111111-222222-333333-444444-555555-666666-777777-888888")],
+                "On"),
+            new EncryptionVolume(
+                "D:",
+                "BitLocker",
+                "TPM Only (No Key)",
+                [],
+                [],
+                "On")
+        ]));
+
+        BitLockerStatusSnapshot snapshot = service.GetSnapshot();
+        Assert.Equal(2, snapshot.Volumes!.Count);
+        Assert.True(snapshot.Volumes[0].HasRecoveryKey);
+        Assert.False(snapshot.Volumes[1].HasRecoveryKey);
+        string json = System.Text.Json.JsonSerializer.Serialize(snapshot.Volumes);
+        Assert.DoesNotContain("111111", json);
+    }
+
     private static InventoryWorker CreateWorker(
         IDeviceInventoryCollector collector,
         IInventoryReporter reporter,
@@ -149,6 +220,7 @@ public sealed class InventoryWorkerSyncTests
             }),
             time,
             systemEventLogger ?? new NoOpSystemEventLogger(),
+            new UnsupportedBitLockerStatusService(),
             NullLogger<InventoryWorker>.Instance);
 
     private sealed class NoOpSystemEventLogger : ISystemEventLogger
@@ -241,5 +313,15 @@ public sealed class InventoryWorkerSyncTests
 
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class ThrowingProcessRunner : IProcessRunner
+    {
+        public Task<ProcessResult> RunAsync(
+            string fileName,
+            IEnumerable<string> arguments,
+            TimeSpan timeout,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Process runner should not be used for inventory mapping.");
     }
 }

@@ -241,7 +241,7 @@ the connection settings. The legacy 1.0.0 MSI had an uninstall launch-condition
 bug, so upgrade that release through the full installer UI; the compatibility
 flow removes it before installing the new version.
 
-The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time, choose **Sync Now**, or open **How to enable encryption…** for a BitLocker walkthrough (including opening Windows BitLocker settings). Exit closes only the tray helper; the `AssetBeeDrone` service keeps running. The tray talks to the service through `%ProgramData%\AssetBee\Drone\` (status heartbeat + sync request files).
+The MSI also installs **AssetBee.Drone.Tray**, a notification-area app that starts at logon. Right-click the tray icon to see the last successful sync time, choose **Sync Now**, or open **How to enable encryption…** for a BitLocker walkthrough (including opening Windows BitLocker settings). The guide’s current-status panel is filled by the LocalSystem service (via `%ProgramData%\AssetBee\Drone\bitlocker.request` / `status.json`), not by the tray process itself. Exit closes only the tray helper; the `AssetBeeDrone` service keeps running. The tray talks to the service through `%ProgramData%\AssetBee\Drone\` (status heartbeat + sync/update/BitLocker request files).
 
 **Portable archive / publish folder**
 

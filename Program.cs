@@ -65,6 +65,15 @@ builder.Services.AddSingleton<CloudDiskEncryptionProbe>(services =>
         factory.CreateClient(CloudDiskEncryptionProbe.HttpClientName),
         services.GetRequiredService<TimeProvider>());
 });
+if (OperatingSystem.IsWindows())
+{
+    builder.Services.AddSingleton<IBitLockerStatusService, WindowsBitLockerStatusService>();
+}
+else
+{
+    builder.Services.AddSingleton<IBitLockerStatusService, UnsupportedBitLockerStatusService>();
+}
+
 builder.Services.AddSingleton<InventoryWorker>();
 builder.Services.AddSingleton<IInventorySyncController>(services =>
     services.GetRequiredService<InventoryWorker>());
@@ -113,6 +122,7 @@ if (OperatingSystem.IsWindows())
             services.GetRequiredService<IInventorySyncController>(),
             services.GetService<IUpdateCoordinator>(),
             services.GetService<IUpdateCheckController>(),
+            services.GetRequiredService<IBitLockerStatusService>(),
             services.GetRequiredService<TimeProvider>(),
             services.GetRequiredService<ILogger<TrayFileIpcServer>>()));
 }
