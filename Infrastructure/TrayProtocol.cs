@@ -30,3 +30,12 @@ public sealed record TrayStatusResponse(
 [JsonSerializable(typeof(TrayBitLockerVolume))]
 [JsonSerializable(typeof(IReadOnlyList<TrayBitLockerVolume>))]
 public sealed partial class TrayJsonContext : JsonSerializerContext;
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    PropertyNameCaseInsensitive = true,
+    WriteIndented = true)]
+[JsonSerializable(typeof(PendingRemoteInstall))]
+[JsonSerializable(typeof(RemoteInstallUserDecision))]
+public sealed partial class RemoteInstallJsonContext : JsonSerializerContext;

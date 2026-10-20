@@ -21,13 +21,6 @@ public static class RemoteInstallIpc
     public const string PendingFileName = "pending-install.json";
     public const string DecisionFileName = "install-decision.json";
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = true
-    };
-
     public static string PendingPath => Path.Combine(TrayIpcPaths.GetDirectoryPath(), PendingFileName);
 
     public static string DecisionPath => Path.Combine(TrayIpcPaths.GetDirectoryPath(), DecisionFileName);
@@ -35,7 +28,9 @@ public static class RemoteInstallIpc
     public static void WritePending(PendingRemoteInstall pending)
     {
         Directory.CreateDirectory(TrayIpcPaths.GetDirectoryPath());
-        File.WriteAllText(PendingPath, JsonSerializer.Serialize(pending, JsonOptions));
+        File.WriteAllText(
+            PendingPath,
+            JsonSerializer.Serialize(pending, RemoteInstallJsonContext.Default.PendingRemoteInstall));
     }
 
     public static PendingRemoteInstall? ReadPending()
@@ -48,7 +43,7 @@ public static class RemoteInstallIpc
             }
 
             string json = File.ReadAllText(PendingPath);
-            return JsonSerializer.Deserialize<PendingRemoteInstall>(json, JsonOptions);
+            return JsonSerializer.Deserialize(json, RemoteInstallJsonContext.Default.PendingRemoteInstall);
         }
         catch (Exception)
         {
@@ -64,7 +59,9 @@ public static class RemoteInstallIpc
     public static void WriteDecision(RemoteInstallUserDecision decision)
     {
         Directory.CreateDirectory(TrayIpcPaths.GetDirectoryPath());
-        File.WriteAllText(DecisionPath, JsonSerializer.Serialize(decision, JsonOptions));
+        File.WriteAllText(
+            DecisionPath,
+            JsonSerializer.Serialize(decision, RemoteInstallJsonContext.Default.RemoteInstallUserDecision));
     }
 
     public static RemoteInstallUserDecision? ReadDecision()
@@ -77,7 +74,7 @@ public static class RemoteInstallIpc
             }
 
             string json = File.ReadAllText(DecisionPath);
-            return JsonSerializer.Deserialize<RemoteInstallUserDecision>(json, JsonOptions);
+            return JsonSerializer.Deserialize(json, RemoteInstallJsonContext.Default.RemoteInstallUserDecision);
         }
         catch (Exception)
         {

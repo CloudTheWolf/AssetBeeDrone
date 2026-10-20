@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AssetBeeDrone.Collectors;
 using AssetBeeDrone.Configuration;
 using AssetBeeDrone.Infrastructure;
@@ -247,7 +248,9 @@ public sealed class CommandWorker(
             verified.Id,
             new DroneCommandStatusUpdate(
                 result.Succeeded ? "succeeded" : "failed",
-                Result: new { exitCode = result.ExitCode, message = result.Message },
+                Result: JsonSerializer.SerializeToElement(
+                    new PackageInstallStatusResult(result.ExitCode, result.Message),
+                    DroneCommandJsonContext.Default.PackageInstallStatusResult),
                 Error: result.Succeeded ? null : result.Message),
             cancellationToken);
     }
@@ -268,14 +271,16 @@ public sealed class CommandWorker(
         try
         {
             DeviceInventory inventory = await inventoryCollector.CollectAsync(cancellationToken);
-            object result = verified.Type switch
+            bool unsupported = verified.Type is not ("bitlocker_status" or "windows_update_status");
+            JsonElement result = verified.Type switch
             {
                 "bitlocker_status" => BuildBitLockerResult(inventory),
                 "windows_update_status" => BuildWindowsUpdateResult(inventory),
-                _ => new { detail = $"Unsupported command type '{verified.Type}'." }
+                _ => JsonSerializer.SerializeToElement(
+                    new UnsupportedCommandResult($"Unsupported command type '{verified.Type}'."),
+                    DroneCommandJsonContext.Default.UnsupportedCommandResult)
             };
 
-            bool unsupported = verified.Type is not ("bitlocker_status" or "windows_update_status");
             await commandClient.ReportStatusAsync(
                 verified.Id,
                 new DroneCommandStatusUpdate(
@@ -323,54 +328,55 @@ public sealed class CommandWorker(
         return verification.Command;
     }
 
-    private static object BuildBitLockerResult(DeviceInventory inventory)
+    private static JsonElement BuildBitLockerResult(DeviceInventory inventory)
     {
         if (inventory.DiskEncryption.Status != ProbeStatus.Available ||
             inventory.DiskEncryption.Value is null)
         {
-            return new
-            {
-                status = inventory.DiskEncryption.Status.ToString(),
-                detail = inventory.DiskEncryption.Detail
-            };
+            return JsonSerializer.SerializeToElement(
+                new ProbeUnavailableResult(
+                    inventory.DiskEncryption.Status.ToString(),
+                    inventory.DiskEncryption.Detail),
+                DroneCommandJsonContext.Default.ProbeUnavailableResult);
         }
 
-        return new
-        {
-            volumes = inventory.DiskEncryption.Value.Select(volume => new
-            {
-                volume = volume.Volume,
-                technology = volume.Technology,
-                state = volume.State,
-                protectionStatus = volume.ProtectionStatus,
-                hasRecoveryKey = (volume.RecoveryKeys?.Count ?? 0) > 0 ||
-                                 (volume.KeyProtectors?.Any(p => !string.IsNullOrWhiteSpace(p.RecoveryKey)) ?? false)
-            }).ToList()
-        };
+        BitLockerStatusResult payload = new(
+            inventory.DiskEncryption.Value.Select(volume => new BitLockerVolumeStatusResult(
+                volume.Volume,
+                volume.Technology,
+                volume.State,
+                volume.ProtectionStatus,
+                (volume.RecoveryKeys?.Count ?? 0) > 0 ||
+                (volume.KeyProtectors?.Any(p => !string.IsNullOrWhiteSpace(p.RecoveryKey)) ?? false)
+            )).ToList());
+
+        return JsonSerializer.SerializeToElement(
+            payload,
+            DroneCommandJsonContext.Default.BitLockerStatusResult);
     }
 
-    private static object BuildWindowsUpdateResult(DeviceInventory inventory)
+    private static JsonElement BuildWindowsUpdateResult(DeviceInventory inventory)
     {
         if (inventory.Updates.Status != ProbeStatus.Available || inventory.Updates.Value is null)
         {
-            return new
-            {
-                status = inventory.Updates.Status.ToString(),
-                detail = inventory.Updates.Detail
-            };
+            return JsonSerializer.SerializeToElement(
+                new ProbeUnavailableResult(
+                    inventory.Updates.Status.ToString(),
+                    inventory.Updates.Detail),
+                DroneCommandJsonContext.Default.ProbeUnavailableResult);
         }
 
-        return new
-        {
-            installedCount = inventory.Updates.Value.Installed.Count,
-            availableCount = inventory.Updates.Value.Available.Count,
-            available = inventory.Updates.Value.Available.Take(25).Select(update => new
-            {
-                id = update.Id,
-                title = update.Title,
-                category = update.Category,
-                kbArticle = update.KbArticle
-            }).ToList()
-        };
+        WindowsUpdateStatusResult payload = new(
+            inventory.Updates.Value.Installed.Count,
+            inventory.Updates.Value.Available.Count,
+            inventory.Updates.Value.Available.Take(25).Select(update => new WindowsUpdateItemStatusResult(
+                update.Id,
+                update.Title,
+                update.Category,
+                update.KbArticle)).ToList());
+
+        return JsonSerializer.SerializeToElement(
+            payload,
+            DroneCommandJsonContext.Default.WindowsUpdateStatusResult);
     }
 }

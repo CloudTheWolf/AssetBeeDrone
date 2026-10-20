@@ -110,7 +110,36 @@ public sealed class DroneCommandClientTests
         Assert.Equal(9, verification.Command.Id);
         Assert.Equal(HttpMethod.Post, handler.Method);
         Assert.Contains("/drone/commands/9/verify", handler.RequestUri!.AbsolutePath, StringComparison.Ordinal);
-        Assert.Contains("SN-1", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"serialNumber\":\"SN-1\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"deviceName\":\"PC-1\"", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReportStatusAsync_serializes_status_without_reflection()
+    {
+        CommandHandler handler = new(HttpStatusCode.OK, "{}");
+        using HttpClient client = new(handler);
+        HttpDroneCommandClient commandClient = new(
+            client,
+            Options.Create(new DroneOptions
+            {
+                Endpoint = new Uri("https://inventory.example.test/api/v1/inventory")
+            }),
+            NullLogger<HttpDroneCommandClient>.Instance);
+
+        await commandClient.ReportStatusAsync(
+            9,
+            new DroneCommandStatusUpdate(
+                "succeeded",
+                Result: System.Text.Json.JsonSerializer.SerializeToElement(
+                    new PackageInstallStatusResult(0, "ok"),
+                    DroneCommandJsonContext.Default.PackageInstallStatusResult)),
+            CancellationToken.None);
+
+        Assert.Equal(HttpMethod.Post, handler.Method);
+        Assert.Contains("/drone/commands/9/status", handler.RequestUri!.AbsolutePath, StringComparison.Ordinal);
+        Assert.Contains("\"status\":\"succeeded\"", handler.LastBody, StringComparison.Ordinal);
+        Assert.Contains("\"exitCode\":0", handler.LastBody, StringComparison.Ordinal);
     }
 
     [Fact]

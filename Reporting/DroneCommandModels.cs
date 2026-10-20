@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace AssetBeeDrone.Reporting;
 
 public sealed record DroneCommandPackage(
@@ -25,7 +27,7 @@ public sealed record DroneCommand(
 public sealed record DroneCommandStatusUpdate(
     string Status,
     DateTimeOffset? ScheduledFor = null,
-    object? Result = null,
+    JsonElement? Result = null,
     string? Error = null);
 
 public sealed record DroneCommandVerification(

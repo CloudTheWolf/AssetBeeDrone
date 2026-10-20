@@ -11,12 +11,6 @@ public sealed class HttpDroneCommandClient(
     IOptions<DroneOptions> options,
     ILogger<HttpDroneCommandClient> logger) : IDroneCommandClient
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     private readonly DroneOptions _options = options.Value;
 
     public async Task<IReadOnlyList<DroneCommand>> ListCommandsAsync(
@@ -67,11 +61,9 @@ public sealed class HttpDroneCommandClient(
         try
         {
             Uri uri = new(_options.Endpoint, $"drone/commands/{targetId}/verify");
-            string body = JsonSerializer.Serialize(new
-            {
-                serialNumber,
-                deviceName
-            }, JsonOptions);
+            string body = JsonSerializer.Serialize(
+                new DroneDeviceIdentityRequest(serialNumber, deviceName),
+                DroneCommandJsonContext.Default.DroneDeviceIdentityRequest);
 
             using HttpRequestMessage request = CreateRequest(HttpMethod.Post, uri);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -137,13 +129,13 @@ public sealed class HttpDroneCommandClient(
         CancellationToken cancellationToken)
     {
         Uri uri = new(_options.Endpoint, $"drone/commands/{targetId}/status");
-        string body = JsonSerializer.Serialize(new
-        {
-            status = update.Status,
-            scheduledFor = update.ScheduledFor,
-            result = update.Result,
-            error = update.Error
-        }, JsonOptions);
+        string body = JsonSerializer.Serialize(
+            new DroneCommandStatusRequest(
+                update.Status,
+                update.ScheduledFor,
+                update.Result,
+                update.Error),
+            DroneCommandJsonContext.Default.DroneCommandStatusRequest);
 
         using HttpRequestMessage request = CreateRequest(HttpMethod.Post, uri);
         request.Content = new StringContent(body, Encoding.UTF8, "application/json");
