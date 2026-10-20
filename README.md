@@ -138,6 +138,16 @@ Drone turns on BitLocker for fixed drives that are unencrypted or missing a
 numerical recovery password. If the settings request fails or the flag is
 missing/invalid, remediation stays off.
 
+## Remote commands
+
+Drone also polls `GET /api/v1/drone/commands` (every
+`Drone:CommandPollIntervalMinutes`, default 2) for org-initiated probes and
+curated package installs. BitLocker / Windows Update probes run silently.
+Installs notify the tray user, who may install now, postpone, or schedule a
+time within 24 hours of first notice; after the deadline the service installs
+automatically. Status is reported via
+`POST /api/v1/drone/commands/{id}/status`.
+
 ## Build and test
 
 Install the .NET 10 SDK, then run:

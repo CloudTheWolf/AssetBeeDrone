@@ -33,6 +33,39 @@ internal static class TrayFileIpcClient
 
     public static string BitLockerRequestPath => Path.Combine(GetDirectoryPath(), "bitlocker.request");
 
+    public static string PendingInstallPath => Path.Combine(GetDirectoryPath(), "pending-install.json");
+
+    public static string InstallDecisionPath => Path.Combine(GetDirectoryPath(), "install-decision.json");
+
+    public static TrayPendingInstall? ReadPendingInstall()
+    {
+        try
+        {
+            if (!File.Exists(PendingInstallPath))
+            {
+                return null;
+            }
+
+            string json = File.ReadAllText(PendingInstallPath);
+            return string.IsNullOrWhiteSpace(json)
+                ? null
+                : JsonSerializer.Deserialize<TrayPendingInstall>(json, JsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public static void WriteInstallDecision(long targetId, string action, DateTimeOffset? scheduledFor)
+    {
+        Directory.CreateDirectory(GetDirectoryPath());
+        string json = JsonSerializer.Serialize(
+            new TrayInstallDecision(targetId, action, scheduledFor, DateTimeOffset.UtcNow),
+            JsonOptions);
+        File.WriteAllText(InstallDecisionPath, json);
+    }
+
     public static TrayStatusResponse? ReadStatus()
     {
         string path = StatusPath;
@@ -87,6 +120,20 @@ internal static class TrayFileIpcClient
         File.WriteAllText(path, DateTimeOffset.UtcNow.ToString("O"));
     }
 }
+
+internal sealed record TrayPendingInstall(
+    long TargetId,
+    string PackageName,
+    string Source,
+    DateTimeOffset? PostponeDeadlineAt,
+    DateTimeOffset? ScheduledFor,
+    DateTimeOffset WrittenAtUtc);
+
+internal sealed record TrayInstallDecision(
+    long TargetId,
+    string Action,
+    DateTimeOffset? ScheduledFor,
+    DateTimeOffset WrittenAtUtc);
 
 internal sealed record TrayBitLockerVolume(
     string Volume,

@@ -18,12 +18,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _checkUpdatesItem;
     private readonly ToolStripMenuItem _installUpdateItem;
     private readonly ToolStripMenuItem _encryptionGuideItem;
+    private readonly ToolStripMenuItem _remoteInstallItem;
     private readonly ToolStripMenuItem _aboutItem;
     private readonly System.Windows.Forms.Timer _refreshTimer;
     private readonly DateTimeOffset _startedUtc = DateTimeOffset.UtcNow;
     private bool _syncInFlight;
     private bool _checkInFlight;
     private bool _installInFlight;
+    private bool _remoteInstallPromptOpen;
+    private long? _announcedRemoteInstallTargetId;
     private string? _balloonAnnouncedVersion;
     private string? _lastServiceVersion;
 
@@ -44,6 +47,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
             "How to enable encryption…",
             null,
             (_, _) => EncryptionGuideForm.ShowGuide());
+        _remoteInstallItem = new ToolStripMenuItem(
+            "Pending remote install…",
+            null,
+            (_, _) => ShowRemoteInstallPrompt(force: true))
+        {
+            Visible = false
+        };
         _aboutItem = new ToolStripMenuItem("About", null, (_, _) => ShowAbout());
 
         ContextMenuStrip menu = new();
@@ -52,6 +62,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_syncNowItem);
         menu.Items.Add(_checkUpdatesItem);
         menu.Items.Add(_installUpdateItem);
+        menu.Items.Add(_remoteInstallItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_encryptionGuideItem);
         menu.Items.Add(_aboutItem);
@@ -65,7 +76,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Visible = true,
             ContextMenuStrip = menu
         };
-        _notifyIcon.BalloonTipClicked += (_, _) => InstallUpdate();
+        _notifyIcon.BalloonTipClicked += (_, _) =>
+        {
+            if (TrayFileIpcClient.ReadPendingInstall() is not null)
+            {
+                ShowRemoteInstallPrompt(force: true);
+                return;
+            }
+
+            InstallUpdate();
+        };
 
         _refreshTimer = new System.Windows.Forms.Timer { Interval = 1_000 };
         _refreshTimer.Tick += (_, _) => RefreshStatus();
@@ -118,10 +138,80 @@ internal sealed class TrayApplicationContext : ApplicationContext
             }
 
             ApplyStatus(status);
+            CheckPendingRemoteInstall();
         }
         catch (Exception exception)
         {
             SetUnavailable(exception.Message);
+        }
+    }
+
+    private void CheckPendingRemoteInstall()
+    {
+        TrayPendingInstall? pending = TrayFileIpcClient.ReadPendingInstall();
+        _remoteInstallItem.Visible = pending is not null;
+        if (pending is null)
+        {
+            _announcedRemoteInstallTargetId = null;
+            return;
+        }
+
+        if (_announcedRemoteInstallTargetId == pending.TargetId || _remoteInstallPromptOpen)
+        {
+            return;
+        }
+
+        _announcedRemoteInstallTargetId = pending.TargetId;
+        _notifyIcon.ShowBalloonTip(
+            15_000,
+            "AssetBee remote install",
+            $"IT wants to install \"{pending.PackageName}\". Click for options.",
+            ToolTipIcon.Info);
+        ShowRemoteInstallPrompt(force: false);
+    }
+
+    private void ShowRemoteInstallPrompt(bool force)
+    {
+        if (_remoteInstallPromptOpen)
+        {
+            return;
+        }
+
+        TrayPendingInstall? pending = TrayFileIpcClient.ReadPendingInstall();
+        if (pending is null)
+        {
+            return;
+        }
+
+        if (!force && _announcedRemoteInstallTargetId != pending.TargetId)
+        {
+            return;
+        }
+
+        _remoteInstallPromptOpen = true;
+        try
+        {
+            using RemoteInstallPromptForm form = new(
+                pending.PackageName,
+                pending.PostponeDeadlineAt,
+                pending.ScheduledFor);
+            if (form.ShowDialog() == DialogResult.OK && form.Decision != "dismiss")
+            {
+                TrayFileIpcClient.WriteInstallDecision(
+                    pending.TargetId,
+                    form.Decision,
+                    form.ScheduledFor);
+                ShowTip(
+                    "AssetBee Drone",
+                    form.Decision == "install_now"
+                        ? "Install started."
+                        : $"Install scheduled for {form.ScheduledFor?.ToLocalTime():g}.",
+                    ToolTipIcon.Info);
+            }
+        }
+        finally
+        {
+            _remoteInstallPromptOpen = false;
         }
     }
 

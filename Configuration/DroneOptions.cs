@@ -12,6 +12,12 @@ public sealed class DroneOptions
     [Range(1, 10080)]
     public int CollectionIntervalMinutes { get; set; } = 3600;
 
+    /// <summary>
+    /// How often to poll AssetBee for pending remote commands.
+    /// </summary>
+    [Range(1, 60)]
+    public int CommandPollIntervalMinutes { get; set; } = 2;
+
     [Range(5, 300)]
     public int RequestTimeoutSeconds { get; set; } = 30;
 
@@ -63,6 +69,8 @@ public sealed class DroneOptions
     public int AutoUpdateIntervalHours { get; set; } = 1;
 
     public TimeSpan CollectionInterval => TimeSpan.FromMinutes(CollectionIntervalMinutes);
+
+    public TimeSpan CommandPollInterval => TimeSpan.FromMinutes(CommandPollIntervalMinutes);
 
     public TimeSpan RequestTimeout => TimeSpan.FromSeconds(RequestTimeoutSeconds);
 

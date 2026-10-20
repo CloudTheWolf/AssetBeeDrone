@@ -12,6 +12,12 @@ public sealed class DroneOptionsValidator : IValidateOptions<DroneOptions>
                 "Drone:CollectionIntervalMinutes must be between 1 and 10080.");
         }
 
+        if (options.CommandPollIntervalMinutes is < 1 or > 60)
+        {
+            return ValidateOptionsResult.Fail(
+                "Drone:CommandPollIntervalMinutes must be between 1 and 60.");
+        }
+
         if (options.RequestTimeoutSeconds is < 5 or > 300)
         {
             return ValidateOptionsResult.Fail(
