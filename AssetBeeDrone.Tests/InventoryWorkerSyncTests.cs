@@ -208,11 +208,16 @@ public sealed class InventoryWorkerSyncTests
         IDeviceInventoryCollector collector,
         IInventoryReporter reporter,
         TimeProvider time,
-        ISystemEventLogger? systemEventLogger = null) =>
+        ISystemEventLogger? systemEventLogger = null,
+        IDroneSettingsClient? settingsClient = null,
+        IBitLockerRemediationService? remediation = null,
+        IAssetClassificationService? classifier = null) =>
         new(
             collector,
-            new FakeClassifier(),
+            classifier ?? new FakeClassifier(),
             reporter,
+            settingsClient ?? new FakeSettingsClient(enableDriveEncryption: false),
+            remediation ?? new UnsupportedBitLockerRemediationService(),
             Options.Create(new DroneOptions
             {
                 Endpoint = new Uri("https://inventory.example.test/v1"),
@@ -315,6 +320,37 @@ public sealed class InventoryWorkerSyncTests
         }
     }
 
+    private sealed class FakeSettingsClient(bool enableDriveEncryption) : IDroneSettingsClient
+    {
+        public int Calls { get; private set; }
+
+        public Task<DroneRemoteSettings> GetSettingsAsync(CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(new DroneRemoteSettings(enableDriveEncryption));
+        }
+    }
+
+    private sealed class FakeRemediationService : IBitLockerRemediationService
+    {
+        public int Calls { get; private set; }
+
+        public Task<BitLockerRemediationResult> EnsureFixedDrivesEncryptedAsync(
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(new BitLockerRemediationResult(true, []));
+        }
+    }
+
+    private sealed class ConfigurableClassifier(string hardwareType) : IAssetClassificationService
+    {
+        public Task<AssetClassification> ClassifyAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new AssetClassification(
+                "hardware",
+                ProbeValue<string>.Available(hardwareType)));
+    }
+
     private sealed class ThrowingProcessRunner : IProcessRunner
     {
         public Task<ProcessResult> RunAsync(
@@ -323,5 +359,78 @@ public sealed class InventoryWorkerSyncTests
             TimeSpan timeout,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Process runner should not be used for inventory mapping.");
+    }
+
+    [Fact]
+    public async Task RequestSync_remediates_bitlocker_when_org_enabled_and_laptop()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        StubTimeProvider time = new(DateTimeOffset.Parse("2026-01-01T12:00:00Z"));
+        FakeCollector collector = new();
+        FakeReporter reporter = new();
+        FakeSettingsClient settings = new(enableDriveEncryption: true);
+        FakeRemediationService remediation = new();
+        InventoryWorker worker = CreateWorker(
+            collector,
+            reporter,
+            time,
+            settingsClient: settings,
+            remediation: remediation,
+            classifier: new ConfigurableClassifier("laptop"));
+
+        await worker.RequestSyncAsync(CancellationToken.None);
+
+        Assert.Equal(1, settings.Calls);
+        Assert.Equal(1, remediation.Calls);
+        Assert.Equal(1, collector.Calls);
+        Assert.Equal(1, reporter.Calls);
+    }
+
+    [Fact]
+    public async Task RequestSync_skips_bitlocker_remediation_when_org_disabled()
+    {
+        StubTimeProvider time = new(DateTimeOffset.Parse("2026-01-01T12:00:00Z"));
+        FakeCollector collector = new();
+        FakeReporter reporter = new();
+        FakeSettingsClient settings = new(enableDriveEncryption: false);
+        FakeRemediationService remediation = new();
+        InventoryWorker worker = CreateWorker(
+            collector,
+            reporter,
+            time,
+            settingsClient: settings,
+            remediation: remediation,
+            classifier: new ConfigurableClassifier("laptop"));
+
+        await worker.RequestSyncAsync(CancellationToken.None);
+
+        Assert.Equal(OperatingSystem.IsWindows() ? 1 : 0, settings.Calls);
+        Assert.Equal(0, remediation.Calls);
+    }
+
+    [Fact]
+    public async Task RequestSync_skips_bitlocker_remediation_for_servers()
+    {
+        StubTimeProvider time = new(DateTimeOffset.Parse("2026-01-01T12:00:00Z"));
+        FakeCollector collector = new();
+        FakeReporter reporter = new();
+        FakeSettingsClient settings = new(enableDriveEncryption: true);
+        FakeRemediationService remediation = new();
+        InventoryWorker worker = CreateWorker(
+            collector,
+            reporter,
+            time,
+            settingsClient: settings,
+            remediation: remediation,
+            classifier: new ConfigurableClassifier("server"));
+
+        await worker.RequestSyncAsync(CancellationToken.None);
+
+        Assert.Equal(0, settings.Calls);
+        Assert.Equal(0, remediation.Calls);
     }
 }

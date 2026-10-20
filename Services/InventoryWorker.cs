@@ -1,6 +1,7 @@
 using AssetBeeDrone.Collectors;
 using AssetBeeDrone.Configuration;
 using AssetBeeDrone.Infrastructure;
+using AssetBeeDrone.Models;
 using AssetBeeDrone.Reporting;
 using Microsoft.Extensions.Options;
 
@@ -24,6 +25,8 @@ public sealed class InventoryWorker(
     IDeviceInventoryCollector collector,
     IAssetClassificationService classificationService,
     IInventoryReporter reporter,
+    IDroneSettingsClient droneSettingsClient,
+    IBitLockerRemediationService bitLockerRemediationService,
     IOptions<DroneOptions> options,
     TimeProvider timeProvider,
     ISystemEventLogger systemEventLogger,
@@ -104,6 +107,9 @@ public sealed class InventoryWorker(
             logger.LogInformation("Collecting device inventory");
             AssetClassification classification =
                 await classificationService.ClassifyAsync(cancellationToken);
+
+            await MaybeRemediateDriveEncryptionAsync(classification, cancellationToken);
+
             var inventory = await collector.CollectAsync(cancellationToken);
             bitLockerStatusService.UpdateFromInventory(inventory.DiskEncryption);
             await reporter.ReportAsync(
@@ -142,5 +148,66 @@ public sealed class InventoryWorker(
         {
             Volatile.Write(ref _running, 0);
         }
+    }
+
+    private async Task MaybeRemediateDriveEncryptionAsync(
+        AssetClassification classification,
+        CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        if (!IsDesktopOrLaptop(classification))
+        {
+            logger.LogDebug(
+                "Skipping drive-encryption remediation for hardware type {HardwareType}",
+                classification.HardwareType.Value ?? classification.HardwareType.Status.ToString());
+            return;
+        }
+
+        DroneRemoteSettings settings =
+            await droneSettingsClient.GetSettingsAsync(cancellationToken);
+        if (!settings.EnableDriveEncryption)
+        {
+            logger.LogDebug(
+                "Org enableDriveEncryption is off or unavailable; skipping BitLocker remediation");
+            return;
+        }
+
+        logger.LogInformation(
+            "Org enableDriveEncryption is on; ensuring BitLocker on fixed drives");
+        try
+        {
+            BitLockerRemediationResult result =
+                await bitLockerRemediationService.EnsureFixedDrivesEncryptedAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(result.Detail))
+            {
+                logger.LogWarning("BitLocker remediation finished with detail: {Detail}", result.Detail);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception,
+                "BitLocker remediation failed; continuing with inventory collection");
+        }
+    }
+
+    private static bool IsDesktopOrLaptop(AssetClassification classification)
+    {
+        if (classification.HardwareType.Status != ProbeStatus.Available ||
+            string.IsNullOrWhiteSpace(classification.HardwareType.Value))
+        {
+            return false;
+        }
+
+        string hardwareType = classification.HardwareType.Value;
+        return hardwareType.Equals("desktop", StringComparison.OrdinalIgnoreCase) ||
+               hardwareType.Equals("laptop", StringComparison.OrdinalIgnoreCase);
     }
 }

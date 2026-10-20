@@ -49,6 +49,13 @@ builder.Services.AddHttpClient<IInventoryReporter, HttpInventoryReporter>((servi
     client.Timeout = options.RequestTimeout;
     client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetBee-Drone/1.0");
 });
+builder.Services.AddHttpClient<IDroneSettingsClient, HttpDroneSettingsClient>((services, client) =>
+{
+    DroneOptions options = services.GetRequiredService<IOptions<DroneOptions>>().Value;
+    client.BaseAddress = options.Endpoint;
+    client.Timeout = options.RequestTimeout;
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("AssetBee-Drone/1.0");
+});
 builder.Services.AddHttpClient(CloudDiskEncryptionProbe.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromSeconds(2);
@@ -68,10 +75,12 @@ builder.Services.AddSingleton<CloudDiskEncryptionProbe>(services =>
 if (OperatingSystem.IsWindows())
 {
     builder.Services.AddSingleton<IBitLockerStatusService, WindowsBitLockerStatusService>();
+    builder.Services.AddSingleton<IBitLockerRemediationService, WindowsBitLockerRemediationService>();
 }
 else
 {
     builder.Services.AddSingleton<IBitLockerStatusService, UnsupportedBitLockerStatusService>();
+    builder.Services.AddSingleton<IBitLockerRemediationService, UnsupportedBitLockerRemediationService>();
 }
 
 builder.Services.AddSingleton<InventoryWorker>();

@@ -131,6 +131,13 @@ administrators/SYSTEM. The receiver should apply equivalent secret-storage,
 audit, rotation, and access-control policies. If key access is denied or no
 recovery protector exists, the report contains no key rather than failing.
 
+When the organization enables **Enable Windows drive encryption** in AssetBee,
+Drone fetches `GET /api/v1/drone/settings` (derived from the inventory endpoint).
+If `enableDriveEncryption` is true and the device is a Windows desktop or laptop,
+Drone turns on BitLocker for fixed drives that are unencrypted or missing a
+numerical recovery password. If the settings request fails or the flag is
+missing/invalid, remediation stays off.
+
 ## Build and test
 
 Install the .NET 10 SDK, then run:
