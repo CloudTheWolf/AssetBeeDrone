@@ -74,21 +74,90 @@ public sealed class DroneCommandClientTests
         Assert.Empty(commands);
     }
 
+    [Fact]
+    public async Task VerifyCommandAsync_returns_authorized_command()
+    {
+        const string body = """
+            {
+              "authorized": true,
+              "reason": null,
+              "command": {
+                "id": 9,
+                "pushId": 3,
+                "type": "bitlocker_status",
+                "status": "pending",
+                "requiresUserConsent": false,
+                "package": null
+              }
+            }
+            """;
+        CommandHandler handler = new(HttpStatusCode.OK, body);
+        using HttpClient client = new(handler);
+        HttpDroneCommandClient commandClient = new(
+            client,
+            Options.Create(new DroneOptions
+            {
+                Endpoint = new Uri("https://inventory.example.test/api/v1/inventory"),
+                ApiKey = "secret"
+            }),
+            NullLogger<HttpDroneCommandClient>.Instance);
+
+        DroneCommandVerification verification =
+            await commandClient.VerifyCommandAsync(9, "SN-1", "PC-1", CancellationToken.None);
+
+        Assert.True(verification.Authorized);
+        Assert.NotNull(verification.Command);
+        Assert.Equal(9, verification.Command.Id);
+        Assert.Equal(HttpMethod.Post, handler.Method);
+        Assert.Contains("/drone/commands/9/verify", handler.RequestUri!.AbsolutePath, StringComparison.Ordinal);
+        Assert.Contains("SN-1", handler.LastBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VerifyCommandAsync_fails_closed_when_unauthorized()
+    {
+        const string body = """
+            { "authorized": false, "reason": "Push is no longer open.", "command": null }
+            """;
+        CommandHandler handler = new(HttpStatusCode.Forbidden, body);
+        using HttpClient client = new(handler);
+        HttpDroneCommandClient commandClient = new(
+            client,
+            Options.Create(new DroneOptions
+            {
+                Endpoint = new Uri("https://inventory.example.test/api/v1/inventory")
+            }),
+            NullLogger<HttpDroneCommandClient>.Instance);
+
+        DroneCommandVerification verification =
+            await commandClient.VerifyCommandAsync(9, "SN-1", null, CancellationToken.None);
+
+        Assert.False(verification.Authorized);
+        Assert.Null(verification.Command);
+        Assert.Contains("no longer open", verification.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class CommandHandler(HttpStatusCode statusCode, string body) : HttpMessageHandler
     {
         public HttpMethod? Method { get; private set; }
         public Uri? RequestUri { get; private set; }
+        public string LastBody { get; private set; } = string.Empty;
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             Method = request.Method;
             RequestUri = request.RequestUri;
-            return Task.FromResult(new HttpResponseMessage(statusCode)
+            if (request.Content is not null)
+            {
+                LastBody = await request.Content.ReadAsStringAsync(cancellationToken);
+            }
+
+            return new HttpResponseMessage(statusCode)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
-            });
+            };
         }
     }
 }

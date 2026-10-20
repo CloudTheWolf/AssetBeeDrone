@@ -142,10 +142,13 @@ missing/invalid, remediation stays off.
 
 Drone also polls `GET /api/v1/drone/commands` (every
 `Drone:CommandPollIntervalMinutes`, default 2) for org-initiated probes and
-curated package installs. BitLocker / Windows Update probes run silently.
-Installs notify the tray user, who may install now, postpone, or schedule a
-time within 24 hours of first notice; after the deadline the service installs
-automatically. Status is reported via
+curated package installs. Before any probe or install runs, Drone calls
+`POST /api/v1/drone/commands/{id}/verify` with this device’s serial/name and
+only proceeds when AssetBee confirms the target is still open, assigned to this
+hardware, and returns a fresh command payload. BitLocker / Windows Update
+probes run silently. Installs notify the tray user, who may install now,
+postpone, or schedule a time within 24 hours of first notice; after the
+deadline the service installs automatically. Status is reported via
 `POST /api/v1/drone/commands/{id}/status`.
 
 ## Build and test

@@ -58,6 +58,79 @@ public sealed class HttpDroneCommandClient(
         return commands;
     }
 
+    public async Task<DroneCommandVerification> VerifyCommandAsync(
+        long targetId,
+        string? serialNumber,
+        string? deviceName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            Uri uri = new(_options.Endpoint, $"drone/commands/{targetId}/verify");
+            string body = JsonSerializer.Serialize(new
+            {
+                serialNumber,
+                deviceName
+            }, JsonOptions);
+
+            using HttpRequestMessage request = CreateRequest(HttpMethod.Post, uri);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+            using HttpResponseMessage response =
+                await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using JsonDocument document =
+                await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            JsonElement root = document.RootElement;
+
+            bool authorized = root.TryGetProperty("authorized", out JsonElement authElement) &&
+                              authElement.ValueKind == JsonValueKind.True;
+            string? reason = GetString(root, "reason");
+
+            if (!authorized)
+            {
+                logger.LogWarning(
+                    "Command {TargetId} verification denied (HTTP {StatusCode}): {Reason}",
+                    targetId,
+                    (int)response.StatusCode,
+                    reason ?? "unauthorized");
+                return new DroneCommandVerification(false, reason ?? "Command was not authorized.", null);
+            }
+
+            if (!root.TryGetProperty("command", out JsonElement commandElement) ||
+                commandElement.ValueKind != JsonValueKind.Object)
+            {
+                return new DroneCommandVerification(
+                    false,
+                    "Verification response omitted command payload.",
+                    null);
+            }
+
+            DroneCommand? command = ParseCommand(commandElement);
+            if (command is null || command.Id != targetId)
+            {
+                return new DroneCommandVerification(
+                    false,
+                    "Verification returned an invalid command payload.",
+                    null);
+            }
+
+            return new DroneCommandVerification(true, null, command);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Command {TargetId} verification failed", targetId);
+            return new DroneCommandVerification(
+                false,
+                "Could not verify command with AssetBee.",
+                null);
+        }
+    }
+
     public async Task ReportStatusAsync(
         long targetId,
         DroneCommandStatusUpdate update,

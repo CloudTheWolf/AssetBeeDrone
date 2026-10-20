@@ -27,3 +27,8 @@ public sealed record DroneCommandStatusUpdate(
     DateTimeOffset? ScheduledFor = null,
     object? Result = null,
     string? Error = null);
+
+public sealed record DroneCommandVerification(
+    bool Authorized,
+    string? Reason,
+    DroneCommand? Command);

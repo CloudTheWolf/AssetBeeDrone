@@ -169,24 +169,20 @@ public sealed class CommandWorker(
         switch (action)
         {
             case "install_now":
-                await commandClient.ReportStatusAsync(
-                    decision.TargetId,
-                    new DroneCommandStatusUpdate("running"),
-                    cancellationToken);
                 _awaitingUser.Remove(decision.TargetId);
                 RemoteInstallIpc.ClearPending();
-                // Package will be loaded on next poll; run by re-fetching.
-                DeviceIdentity identity = await identityProbe.GetAsync(cancellationToken);
-                IReadOnlyList<DroneCommand> commands = await commandClient.ListCommandsAsync(
-                    identity.SerialNumber,
-                    identity.DeviceName,
+                await RunInstallAsync(
+                    new DroneCommand(
+                        decision.TargetId,
+                        0,
+                        "install_package",
+                        "awaiting_user",
+                        true,
+                        null,
+                        null,
+                        null,
+                        null),
                     cancellationToken);
-                DroneCommand? match = commands.FirstOrDefault(c => c.Id == decision.TargetId);
-                if (match is not null)
-                {
-                    await RunInstallAsync(match, cancellationToken);
-                }
-
                 break;
             case "postpone":
             case "schedule":
@@ -217,32 +213,38 @@ public sealed class CommandWorker(
 
     private async Task RunInstallAsync(DroneCommand command, CancellationToken cancellationToken)
     {
-        if (command.Package is null)
+        DroneCommand? verified = await VerifyBeforeExecuteAsync(command.Id, cancellationToken);
+        if (verified is null)
+        {
+            return;
+        }
+
+        if (verified.Package is null)
         {
             await commandClient.ReportStatusAsync(
-                command.Id,
+                verified.Id,
                 new DroneCommandStatusUpdate("failed", Error: "Package metadata missing."),
                 cancellationToken);
             return;
         }
 
-        _awaitingUser.Remove(command.Id);
+        _awaitingUser.Remove(verified.Id);
         RemoteInstallIpc.ClearPending();
         await commandClient.ReportStatusAsync(
-            command.Id,
+            verified.Id,
             new DroneCommandStatusUpdate("running"),
             cancellationToken);
 
         logger.LogInformation(
             "Installing remote package {Package} for target {TargetId}",
-            command.Package.Name,
-            command.Id);
+            verified.Package.Name,
+            verified.Id);
 
         PackageInstallResult result =
-            await packageInstaller.InstallAsync(command.Package, cancellationToken);
+            await packageInstaller.InstallAsync(verified.Package, cancellationToken);
 
         await commandClient.ReportStatusAsync(
-            command.Id,
+            verified.Id,
             new DroneCommandStatusUpdate(
                 result.Succeeded ? "succeeded" : "failed",
                 Result: new { exitCode = result.ExitCode, message = result.Message },
@@ -252,37 +254,73 @@ public sealed class CommandWorker(
 
     private async Task RunProbeAsync(DroneCommand command, CancellationToken cancellationToken)
     {
+        DroneCommand? verified = await VerifyBeforeExecuteAsync(command.Id, cancellationToken);
+        if (verified is null)
+        {
+            return;
+        }
+
         await commandClient.ReportStatusAsync(
-            command.Id,
+            verified.Id,
             new DroneCommandStatusUpdate("running"),
             cancellationToken);
 
         try
         {
             DeviceInventory inventory = await inventoryCollector.CollectAsync(cancellationToken);
-            object result = command.Type switch
+            object result = verified.Type switch
             {
                 "bitlocker_status" => BuildBitLockerResult(inventory),
                 "windows_update_status" => BuildWindowsUpdateResult(inventory),
-                _ => new { detail = $"Unsupported command type '{command.Type}'." }
+                _ => new { detail = $"Unsupported command type '{verified.Type}'." }
             };
 
-            bool unsupported = command.Type is not ("bitlocker_status" or "windows_update_status");
+            bool unsupported = verified.Type is not ("bitlocker_status" or "windows_update_status");
             await commandClient.ReportStatusAsync(
-                command.Id,
+                verified.Id,
                 new DroneCommandStatusUpdate(
                     unsupported ? "unsupported" : "succeeded",
                     Result: result,
-                    Error: unsupported ? $"Unsupported command type '{command.Type}'." : null),
+                    Error: unsupported ? $"Unsupported command type '{verified.Type}'." : null),
                 cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await commandClient.ReportStatusAsync(
-                command.Id,
+                verified.Id,
                 new DroneCommandStatusUpdate("failed", Error: exception.Message),
                 cancellationToken);
         }
+    }
+
+    private async Task<DroneCommand?> VerifyBeforeExecuteAsync(
+        long targetId,
+        CancellationToken cancellationToken)
+    {
+        DeviceIdentity identity = await identityProbe.GetAsync(cancellationToken);
+        DroneCommandVerification verification = await commandClient.VerifyCommandAsync(
+            targetId,
+            identity.SerialNumber,
+            identity.DeviceName,
+            cancellationToken);
+
+        if (!verification.Authorized || verification.Command is null)
+        {
+            logger.LogWarning(
+                "Refusing to execute command {TargetId}: {Reason}",
+                targetId,
+                verification.Reason ?? "not authorized");
+            _awaitingUser.Remove(targetId);
+            PendingRemoteInstall? pending = RemoteInstallIpc.ReadPending();
+            if (pending?.TargetId == targetId)
+            {
+                RemoteInstallIpc.ClearPending();
+            }
+
+            return null;
+        }
+
+        return verification.Command;
     }
 
     private static object BuildBitLockerResult(DeviceInventory inventory)
