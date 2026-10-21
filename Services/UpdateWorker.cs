@@ -16,8 +16,8 @@ public interface IUpdateCheckController
     string? LastCheckMessage { get; }
 
     /// <summary>
-    /// Fetches the update feed once. On Windows, a newer package is staged for tray
-    /// confirmation; on other platforms it applies immediately (same as the timer path).
+    /// Fetches the update feed once and applies a newer package when available
+    /// (same behavior as the timer path on all platforms).
     /// </summary>
     Task<UpdateCheckResult> CheckNowAsync(CancellationToken cancellationToken);
 }
@@ -173,15 +173,15 @@ public sealed class UpdateWorker(
 
             if (OperatingSystem.IsWindows())
             {
-                // Tray prompts the user; install starts only after install.request.
+                // Stage then install immediately so the tray receives QuitTray before msiexec.
                 coordinator.TrySetPending(manifest, package);
-                return new UpdateCheckResult(
-                    true,
-                    manifest.Version,
-                    $"Update {manifest.Version} is available.");
+                await coordinator.RequestInstallAsync(cancellationToken);
+            }
+            else
+            {
+                await applier.ApplyAsync(manifest, package, cancellationToken);
             }
 
-            await applier.ApplyAsync(manifest, package, cancellationToken);
             return new UpdateCheckResult(
                 true,
                 manifest.Version,

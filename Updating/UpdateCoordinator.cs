@@ -83,7 +83,7 @@ public sealed class UpdateCoordinator(
             _error = null;
             _quitTray = false;
             logger.LogInformation(
-                "Update pending user confirmation: {Version} ({FileName})",
+                "Update pending install: {Version} ({FileName})",
                 manifest.Version,
                 package.FileName);
             return true;

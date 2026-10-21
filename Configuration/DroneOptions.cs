@@ -57,7 +57,8 @@ public sealed class DroneOptions
     public bool IncludeContainerSboms { get; set; } = true;
 
     /// <summary>
-    /// When true, periodically checks the build-time update feed and applies newer packages.
+    /// When true, periodically checks the build-time update feed and applies newer packages
+    /// automatically (including silent MSI install on Windows).
     /// Has no effect when the binary was built without <c>UpdateFeedUrl</c>.
     /// </summary>
     public bool AutoUpdate { get; set; } = true;

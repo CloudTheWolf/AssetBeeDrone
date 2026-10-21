@@ -181,7 +181,7 @@ public sealed class AutoUpdateTests
     }
 
     [Fact]
-    public async Task UpdateWorker_CheckNow_stages_pending_update_on_windows()
+    public async Task UpdateWorker_CheckNow_applies_update_on_windows()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -192,17 +192,19 @@ public sealed class AutoUpdateTests
             AppVersion.Current.Major,
             AppVersion.Current.Minor,
             AppVersion.Current.Build + 1);
+        string rid = UpdatePackageSelector.ResolveRuntimeIdentifier();
         UpdateManifest manifest = new(
             newer.ToString(),
-            [new UpdatePackage("win-x64", $"AssetBee.Drone-{newer}-win-x64.msi", "abc")]);
+            [new UpdatePackage(rid, $"AssetBee.Drone-{newer}-{rid}.msi", "abc")]);
         FakeFeedClient feed = new(manifest);
+        RecordingApplier applier = new();
         UpdateCoordinator coordinator = new(
-            new NoOpApplier(),
+            applier,
             TimeProvider.System,
             NullLogger<UpdateCoordinator>.Instance);
         UpdateWorker worker = new(
             feed,
-            new NoOpApplier(),
+            applier,
             coordinator,
             Options.Create(new DroneOptions
             {
@@ -215,8 +217,58 @@ public sealed class AutoUpdateTests
 
         Assert.True(result.UpdateAvailable);
         Assert.Equal(newer.ToString(), result.AvailableVersion);
-        Assert.Equal(UpdateInstallState.Available, coordinator.GetSnapshot().State);
+        Assert.Contains("Installing", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, applier.DownloadCount);
+        Assert.Equal(1, applier.InstallCount);
+        Assert.Equal(UpdateInstallState.Installing, coordinator.GetSnapshot().State);
         Assert.Equal(newer.ToString(), coordinator.GetSnapshot().Version);
+    }
+
+    [Fact]
+    public async Task UpdateWorker_CheckNow_applies_update_on_non_windows()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Version newer = new(
+            AppVersion.Current.Major,
+            AppVersion.Current.Minor,
+            AppVersion.Current.Build + 1);
+        string rid = UpdatePackageSelector.ResolveRuntimeIdentifier();
+        List<UpdatePackage> packages =
+        [
+            new UpdatePackage(rid, $"AssetBee.Drone-{newer}-{rid}.deb", "abc"),
+            new UpdatePackage(rid, $"AssetBee.Drone-{newer}-{rid}.rpm", "def"),
+            new UpdatePackage(rid, $"AssetBee.Drone-{newer}-{rid}.pkg", "ghi")
+        ];
+        UpdateManifest manifest = new(newer.ToString(), packages);
+        FakeFeedClient feed = new(manifest);
+        RecordingApplier applier = new();
+        UpdateCoordinator coordinator = new(
+            applier,
+            TimeProvider.System,
+            NullLogger<UpdateCoordinator>.Instance);
+        UpdateWorker worker = new(
+            feed,
+            applier,
+            coordinator,
+            Options.Create(new DroneOptions
+            {
+                Endpoint = new Uri("https://inventory.example.test/v1")
+            }),
+            TimeProvider.System,
+            NullLogger<UpdateWorker>.Instance);
+
+        UpdateCheckResult result = await worker.CheckNowAsync(CancellationToken.None);
+
+        Assert.True(result.UpdateAvailable);
+        Assert.Equal(newer.ToString(), result.AvailableVersion);
+        Assert.Contains("Installing", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, applier.ApplyCount);
+        Assert.Equal(0, applier.DownloadCount);
+        Assert.Equal(UpdateInstallState.None, coordinator.GetSnapshot().State);
     }
 
     private sealed class FakeFeedClient(UpdateManifest? manifest) : IUpdateFeedClient
@@ -241,6 +293,39 @@ public sealed class AutoUpdateTests
 
         public Task InstallDownloadedAsync(string packagePath, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class RecordingApplier : IUpdateApplier
+    {
+        public int ApplyCount { get; private set; }
+
+        public int DownloadCount { get; private set; }
+
+        public int InstallCount { get; private set; }
+
+        public Task ApplyAsync(
+            UpdateManifest manifest,
+            UpdatePackage package,
+            CancellationToken cancellationToken)
+        {
+            ApplyCount++;
+            return Task.CompletedTask;
+        }
+
+        public Task<string> DownloadAndVerifyAsync(
+            UpdateManifest manifest,
+            UpdatePackage package,
+            CancellationToken cancellationToken)
+        {
+            DownloadCount++;
+            return Task.FromResult(package.FileName);
+        }
+
+        public Task InstallDownloadedAsync(string packagePath, CancellationToken cancellationToken)
+        {
+            InstallCount++;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StaticJsonHandler(string json) : HttpMessageHandler
