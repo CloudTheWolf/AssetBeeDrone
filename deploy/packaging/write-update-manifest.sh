@@ -61,12 +61,21 @@ packages_json=""
 count=0
 
 shopt -s nullglob
+# Only publish packages for this release version. Including every historical build
+# in asset_dir makes clients that pick the first RID match download a stale (often
+# deleted) artifact while latest.json claims a newer version.
+version_prefix="AssetBee.Drone-${version}-"
 for asset in "$asset_dir"/*.msi "$asset_dir"/*.deb "$asset_dir"/*.rpm "$asset_dir"/*.pkg; do
   file_name="$(basename -- "$asset")"
   stem="${file_name%.*}"
   prefix="AssetBee.Drone-"
   if [[ "$stem" != "$prefix"* ]]; then
     echo "Skipping unrecognized asset name: $file_name" >&2
+    continue
+  fi
+
+  if [[ "$file_name" != "$version_prefix"* ]]; then
+    echo "Skipping asset not for version ${version}: $file_name" >&2
     continue
   fi
 

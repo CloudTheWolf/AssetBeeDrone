@@ -94,20 +94,20 @@ public static class UpdatePackageSelector
 {
     public static UpdatePackage? Select(UpdateManifest manifest, string? runtimeIdentifier = null)
     {
+        ArgumentNullException.ThrowIfNull(manifest);
+
         string rid = runtimeIdentifier ?? ResolveRuntimeIdentifier();
         IEnumerable<UpdatePackage> matching = manifest.Packages
             .Where(package => package.Rid.Equals(rid, StringComparison.OrdinalIgnoreCase));
 
         if (OperatingSystem.IsWindows())
         {
-            return matching.FirstOrDefault(package =>
-                package.FileName.EndsWith(".msi", StringComparison.OrdinalIgnoreCase));
+            return SelectPreferred(matching, manifest.Version, ".msi");
         }
 
         if (OperatingSystem.IsMacOS())
         {
-            return matching.FirstOrDefault(package =>
-                package.FileName.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase));
+            return SelectPreferred(matching, manifest.Version, ".pkg");
         }
 
         if (OperatingSystem.IsLinux())
@@ -116,8 +116,7 @@ public static class UpdatePackageSelector
             bool preferRpm = HasExecutable("rpm");
             if (preferDeb)
             {
-                UpdatePackage? deb = matching.FirstOrDefault(package =>
-                    package.FileName.EndsWith(".deb", StringComparison.OrdinalIgnoreCase));
+                UpdatePackage? deb = SelectPreferred(matching, manifest.Version, ".deb");
                 if (deb is not null)
                 {
                     return deb;
@@ -126,20 +125,82 @@ public static class UpdatePackageSelector
 
             if (preferRpm)
             {
-                UpdatePackage? rpm = matching.FirstOrDefault(package =>
-                    package.FileName.EndsWith(".rpm", StringComparison.OrdinalIgnoreCase));
+                UpdatePackage? rpm = SelectPreferred(matching, manifest.Version, ".rpm");
                 if (rpm is not null)
                 {
                     return rpm;
                 }
             }
 
-            return matching.FirstOrDefault(package =>
-                package.FileName.EndsWith(".deb", StringComparison.OrdinalIgnoreCase) ||
-                package.FileName.EndsWith(".rpm", StringComparison.OrdinalIgnoreCase));
+            return SelectPreferred(matching, manifest.Version, ".deb", ".rpm");
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Prefers a package whose file name embeds <paramref name="manifestVersion"/>, otherwise
+    /// the highest versioned candidate. Avoids picking a stale historical MSI/deb from feeds
+    /// that list every release under one <c>latest.json</c>.
+    /// </summary>
+    internal static UpdatePackage? SelectPreferred(
+        IEnumerable<UpdatePackage> candidates,
+        string manifestVersion,
+        params string[] extensions)
+    {
+        List<UpdatePackage> matching = candidates
+            .Where(package => extensions.Any(extension =>
+                package.FileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (matching.Count == 0)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(manifestVersion))
+        {
+            string needle = $"-{manifestVersion.Trim()}-";
+            UpdatePackage? exact = matching.FirstOrDefault(package =>
+                package.FileName.Contains(needle, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null)
+            {
+                return exact;
+            }
+        }
+
+        return matching
+            .Select(package => (Package: package, Version: TryParseFileNameVersion(package.FileName)))
+            .OrderByDescending(entry => entry.Version ?? new Version(0, 0, 0))
+            .ThenBy(entry => entry.Package.FileName, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => entry.Package)
+            .FirstOrDefault();
+    }
+
+    internal static Version? TryParseFileNameVersion(string fileName)
+    {
+        // AssetBee.Drone-1.0.66-win-x64.msi
+        const string prefix = "AssetBee.Drone-";
+        string stem = Path.GetFileNameWithoutExtension(fileName);
+        if (!stem.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        string rest = stem[prefix.Length..];
+        int ridSeparator = rest.LastIndexOf('-');
+        if (ridSeparator <= 0)
+        {
+            return null;
+        }
+
+        // Strip arch segment first ("win-x64" / "linux-x64" → one more dash).
+        string withoutArch = rest[..ridSeparator];
+        int platformSeparator = withoutArch.LastIndexOf('-');
+        string versionPart = platformSeparator > 0
+            ? withoutArch[..platformSeparator]
+            : withoutArch;
+
+        return AppVersion.TryParse(versionPart, out Version version) ? version : null;
     }
 
     public static string ResolveRuntimeIdentifier()

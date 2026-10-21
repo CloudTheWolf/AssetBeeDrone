@@ -131,7 +131,11 @@ public sealed class UpdateCoordinator(
                     _quitTray = false;
                 }
 
-                logger.LogError(exception, "Update download failed for {Version}", manifest.Version);
+                logger.LogError(
+                    exception,
+                    "Update download failed for {Version} ({FileName})",
+                    manifest.Version,
+                    package.FileName);
                 return;
             }
 

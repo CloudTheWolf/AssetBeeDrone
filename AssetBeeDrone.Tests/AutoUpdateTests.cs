@@ -91,6 +91,72 @@ public sealed class AutoUpdateTests
     }
 
     [Fact]
+    public void UpdatePackageSelector_SelectPreferred_matches_manifest_version_not_first()
+    {
+        List<UpdatePackage> packages =
+        [
+            new UpdatePackage(
+                "win-x64",
+                "AssetBee.Drone-1.0.57-win-x64.msi",
+                "aa",
+                "https://cdn.example.test/AssetBee.Drone-1.0.57-win-x64.msi"),
+            new UpdatePackage(
+                "win-x64",
+                "AssetBee.Drone-1.0.66-win-x64.msi",
+                "bb",
+                "https://cdn.example.test/AssetBee.Drone-1.0.66-win-x64.msi"),
+        ];
+
+        UpdatePackage? selected = UpdatePackageSelector.SelectPreferred(
+            packages,
+            "1.0.66",
+            ".msi");
+
+        Assert.NotNull(selected);
+        Assert.Equal("AssetBee.Drone-1.0.66-win-x64.msi", selected.FileName);
+        Assert.Equal(
+            "https://cdn.example.test/AssetBee.Drone-1.0.66-win-x64.msi",
+            selected.Url);
+    }
+
+    [Fact]
+    public void UpdatePackageSelector_SelectPreferred_falls_back_to_newest_version()
+    {
+        List<UpdatePackage> packages =
+        [
+            new UpdatePackage("linux-x64", "AssetBee.Drone-1.0.57-linux-x64.deb", "aa"),
+            new UpdatePackage("linux-x64", "AssetBee.Drone-1.0.65-linux-x64.deb", "bb"),
+            new UpdatePackage("linux-x64", "AssetBee.Drone-1.0.60-linux-x64.deb", "cc"),
+        ];
+
+        UpdatePackage? selected = UpdatePackageSelector.SelectPreferred(
+            packages,
+            "9.9.9",
+            ".deb");
+
+        Assert.NotNull(selected);
+        Assert.Equal("AssetBee.Drone-1.0.65-linux-x64.deb", selected.FileName);
+    }
+
+    [Theory]
+    [InlineData("AssetBee.Drone-1.0.66-win-x64.msi", "1.0.66")]
+    [InlineData("AssetBee.Drone-1.0.66-linux-x64.deb", "1.0.66")]
+    [InlineData("AssetBee.Drone-1.0.66-osx-arm64.pkg", "1.0.66")]
+    [InlineData("other-1.0.66.msi", null)]
+    public void UpdatePackageSelector_TryParseFileNameVersion(string fileName, string? expected)
+    {
+        Version? parsed = UpdatePackageSelector.TryParseFileNameVersion(fileName);
+        if (expected is null)
+        {
+            Assert.Null(parsed);
+        }
+        else
+        {
+            Assert.Equal(Version.Parse(expected), parsed);
+        }
+    }
+
+    [Fact]
     public async Task UpdateFeedClient_fetches_and_deserializes_manifest()
     {
         const string json = """
