@@ -57,6 +57,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _aboutItem = new ToolStripMenuItem("About", null, (_, _) => ShowAbout());
 
         ContextMenuStrip menu = new();
+        TrayUi.StyleContextMenu(menu);
         menu.Items.Add(_lastSyncItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_syncNowItem);
@@ -67,7 +68,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_encryptionGuideItem);
         menu.Items.Add(_aboutItem);
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => ExitTray()));
-        menu.Opening += (_, _) => RefreshStatus();
+        menu.Opening += (_, _) =>
+        {
+            // Re-apply colors so the menu tracks Windows light/dark changes.
+            TrayUi.StyleContextMenu(menu);
+            RefreshStatus();
+        };
 
         _notifyIcon = new NotifyIcon
         {
@@ -194,7 +200,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             using RemoteInstallPromptForm form = new(
                 pending.PackageName,
                 pending.PostponeDeadlineAt,
-                pending.ScheduledFor);
+                pending.ScheduledFor,
+                pending.AutoInstallAtUtc);
             if (form.ShowDialog() == DialogResult.OK && form.Decision != "dismiss")
             {
                 TrayFileIpcClient.WriteInstallDecision(
@@ -404,20 +411,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 ? version
                 : "Unavailable";
 
-        string updateLine = status is not null &&
+        string? updateVersion = status is not null &&
             TrayFileIpcClient.IsServiceAlive(status, ServiceAliveMaxAge) &&
             status.UpdateAvailable &&
             !string.IsNullOrWhiteSpace(status.UpdateVersion)
-            ? $"{Environment.NewLine}Update available: {status.UpdateVersion}"
-            : string.Empty;
+            ? status.UpdateVersion
+            : null;
 
-        MessageBox.Show(
-            $"AssetBee Drone{Environment.NewLine}{Environment.NewLine}" +
-            $"Service version: {serviceVersion}{Environment.NewLine}" +
-            $"Tray version: {trayVersion}{updateLine}",
-            "About AssetBee Drone",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        using AboutForm about = new(serviceVersion, trayVersion, updateVersion);
+        about.ShowDialog();
     }
 
     private void ApplyStatus(TrayStatusResponse status)

@@ -15,79 +15,63 @@ internal sealed class EncryptionGuideForm : Form
 
     private EncryptionGuideForm()
     {
-        Text = "Enable full disk encryption";
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        StartPosition = FormStartPosition.CenterScreen;
-        ShowInTaskbar = true;
-        ClientSize = new Size(540, 560);
-        Font = SystemFonts.MessageBoxFont;
-        Padding = new Padding(16);
+        Text = "AssetBee · Enable encryption";
+        TrayUi.ApplyFormChrome(this, new Size(560, 620));
 
-        Label heading = new()
+        Label eyebrow = new()
         {
             AutoSize = false,
             Dock = DockStyle.Fill,
-            Text = "BitLocker step-by-step",
-            Font = new Font(Font.FontFamily, Font.Size + 2f, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft
+            Text = "DISK ENCRYPTION",
+            Font = TrayUi.UiFont(8f, FontStyle.Bold),
+            ForeColor = TrayUi.Accent,
+            TextAlign = ContentAlignment.BottomLeft
         };
+
+        Label heading = TrayUi.CreateTitle("Turn on BitLocker");
+        Label intro = TrayUi.CreateMutedBody(
+            "AssetBee needs BitLocker with a recovery key so this device can be restored if Windows cannot unlock the drive.");
 
         Label statusHeading = new()
         {
             AutoSize = false,
             Dock = DockStyle.Fill,
             Text = "Current status",
-            Font = new Font(Font, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft
+            Font = TrayUi.UiFont(9f, FontStyle.Bold),
+            ForeColor = TrayUi.TextPrimary,
+            TextAlign = ContentAlignment.BottomLeft
         };
 
         _statusLabel = new Label
         {
             AutoSize = false,
             Dock = DockStyle.Fill,
-            BorderStyle = BorderStyle.FixedSingle,
-            Padding = new Padding(8),
+            Padding = new Padding(12),
             Text = "Waiting for AssetBee service…",
+            Font = TrayUi.UiFont(9.25f),
+            ForeColor = TrayUi.TextPrimary,
+            BackColor = TrayUi.AccentSoft,
             TextAlign = ContentAlignment.TopLeft,
             UseMnemonic = false
         };
+        Panel statusCard = TrayUi.CreateCard(_statusLabel, new Padding(0));
+        statusCard.BackColor = TrayUi.AccentSoft;
 
-        TextBox guide = new()
-        {
-            Dock = DockStyle.Fill,
-            Multiline = true,
-            ReadOnly = true,
-            BorderStyle = BorderStyle.FixedSingle,
-            ScrollBars = ScrollBars.Vertical,
-            BackColor = SystemColors.Window,
-            Text = BuildGuideText(),
-            TabStop = true
-        };
+        Panel guide = TrayUi.CreateScrollableGuide(BuildGuideText());
+        Panel guideCard = TrayUi.CreateCard(guide, new Padding(12));
 
-        _refreshButton = new Button
-        {
-            Text = "Refresh status",
-            AutoSize = true,
-            Margin = new Padding(0, 0, 8, 0)
-        };
+        _refreshButton = TrayUi.CreateSecondaryButton("Refresh status");
+        _refreshButton.AutoSize = true;
+        _refreshButton.Width = 130;
         _refreshButton.Click += async (_, _) => await RefreshStatusAsync();
 
-        Button openSettings = new()
-        {
-            Text = "Open BitLocker settings",
-            AutoSize = true,
-            Margin = new Padding(0, 0, 8, 0)
-        };
+        Button openSettings = TrayUi.CreateSecondaryButton("Open BitLocker settings");
+        openSettings.AutoSize = true;
+        openSettings.Width = 180;
         openSettings.Click += (_, _) => OpenBitLockerSettings();
 
-        Button close = new()
-        {
-            Text = "Close",
-            AutoSize = true,
-            Margin = new Padding(0)
-        };
+        Button close = TrayUi.CreatePrimaryButton("Close");
+        close.Width = 100;
         close.Click += (_, _) => Close();
         AcceptButton = close;
         CancelButton = close;
@@ -103,24 +87,37 @@ internal sealed class EncryptionGuideForm : Form
         buttons.Controls.Add(openSettings);
         buttons.Controls.Add(_refreshButton);
 
-        TableLayoutPanel root = new()
+        TableLayoutPanel content = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5
+            RowCount = 7,
+            Padding = new Padding(4)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        root.Controls.Add(heading, 0, 0);
-        root.Controls.Add(statusHeading, 0, 1);
-        root.Controls.Add(_statusLabel, 0, 2);
-        root.Controls.Add(guide, 0, 3);
-        root.Controls.Add(buttons, 0, 4);
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+        content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        content.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        content.Controls.Add(eyebrow, 0, 0);
+        content.Controls.Add(heading, 0, 1);
+        content.Controls.Add(intro, 0, 2);
+        content.Controls.Add(statusHeading, 0, 3);
+        content.Controls.Add(statusCard, 0, 4);
+        content.Controls.Add(guideCard, 0, 5);
+        content.Controls.Add(buttons, 0, 6);
 
-        Controls.Add(root);
+        Panel shell = new()
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(20),
+            BackColor = TrayUi.Canvas
+        };
+        shell.Controls.Add(content);
+        Controls.Add(shell);
+
         Shown += async (_, _) => await RefreshStatusAsync();
         FormClosed += (_, _) =>
         {
@@ -272,45 +269,27 @@ internal sealed class EncryptionGuideForm : Form
 
     private static string BuildGuideText() =>
         """
-        AssetBee needs BitLocker turned on with a recovery key so your device
-        can be restored if Windows cannot unlock the drive.
+        1. Select "Open BitLocker settings" below (or search Windows for "Manage BitLocker").
 
-        1. Select "Open BitLocker settings" below (or search Windows for
-           "Manage BitLocker").
+        2. Find your system drive (usually C:) and choose "Turn on BitLocker". You may need to sign in as an administrator.
 
-        2. Find your system drive (usually C:) and choose "Turn on BitLocker".
-           You may need to sign in as an administrator.
+        3. If Windows asks how to unlock the drive at startup, keep the TPM / "this PC" option. Do not skip creating a recovery key.
 
-        3. If Windows asks how to unlock the drive at startup, keep the TPM /
-           "this PC" option. Do not skip creating a recovery key.
-
-        4. When asked how to back up your recovery key, choose any option
-           (Microsoft account, USB, file, or print). AssetBee will also collect
-           the numerical recovery key on the next sync after encryption is on.
+        4. When asked how to back up your recovery key, choose any option. AssetBee will also collect the numerical recovery key on the next sync after encryption is on.
 
         5. Choose "Encrypt entire drive" (full encryption), not only used space.
-           This protects deleted files and free space as well.
 
-        6. If offered, prefer "New encryption mode" on modern Windows PCs, or
-           "Compatible mode" if you move the drive between older systems.
+        6. If offered, prefer "New encryption mode" on modern Windows PCs, or "Compatible mode" if you move the drive between older systems.
 
         7. Confirm and start encryption. Keep the PC powered on until it finishes.
-           Encryption can take a while on large disks.
 
-        8. After BitLocker shows the drive as encrypted, use AssetBee Drone →
-           Sync Now so the recovery key is sent to AssetBee.
+        8. After BitLocker shows the drive as encrypted, use AssetBee Drone → Sync Now so the recovery key is sent to AssetBee.
 
-        If AssetBee later shows "TPM Only (No Key)", protection is on but no
-        numerical recovery key was found. Open BitLocker settings, select
-        "Back up your recovery key" / "Manage BitLocker", and add a recovery
-        password protector, then Sync Now again.
+        If AssetBee later shows "TPM Only (No Key)", open BitLocker settings, add a recovery password protector, then Sync Now again.
 
-        Device Encryption (Settings → Privacy & security → Device encryption)
-        on some PCs is similar; turn it on, then still confirm a recovery key
-        exists under Manage BitLocker.
+        Device Encryption (Settings → Privacy & security → Device encryption) on some PCs is similar; turn it on, then confirm a recovery key exists under Manage BitLocker.
 
-        The status above is read by the AssetBee Drone service (LocalSystem),
-        not by this tray app.
+        Status above is read by the AssetBee Drone service (LocalSystem), not by this tray app.
         """.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
 
     private static void OpenBitLockerSettings()

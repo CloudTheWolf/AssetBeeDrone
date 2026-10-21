@@ -206,22 +206,29 @@ public sealed class HttpDroneCommandClient(
         bool consent = element.TryGetProperty("requiresUserConsent", out JsonElement consentElement) &&
                        consentElement.ValueKind == JsonValueKind.True;
 
-        DroneCommandPackage? package = null;
-        if (element.TryGetProperty("package", out JsonElement packageElement) &&
-            packageElement.ValueKind == JsonValueKind.Object)
+        List<DroneCommandPackage> packages = [];
+        if (element.TryGetProperty("packages", out JsonElement packagesElement) &&
+            packagesElement.ValueKind == JsonValueKind.Array)
         {
-            package = new DroneCommandPackage(
-                packageElement.TryGetProperty("id", out JsonElement pkgId) && pkgId.TryGetInt64(out long pid)
-                    ? pid
-                    : 0,
-                GetString(packageElement, "name") ?? "Package",
-                GetString(packageElement, "source") ?? string.Empty,
-                GetString(packageElement, "msiUrl"),
-                GetString(packageElement, "msiArgs"),
-                GetString(packageElement, "wingetId"),
-                GetString(packageElement, "chocoId"),
-                GetString(packageElement, "silentArgs"),
-                GetString(packageElement, "sha256"));
+            foreach (JsonElement packageElement in packagesElement.EnumerateArray())
+            {
+                DroneCommandPackage? parsed = ParsePackage(packageElement);
+                if (parsed is not null)
+                {
+                    packages.Add(parsed);
+                }
+            }
+        }
+
+        if (packages.Count == 0 &&
+            element.TryGetProperty("package", out JsonElement legacyPackage) &&
+            legacyPackage.ValueKind == JsonValueKind.Object)
+        {
+            DroneCommandPackage? parsed = ParsePackage(legacyPackage);
+            if (parsed is not null)
+            {
+                packages.Add(parsed);
+            }
         }
 
         return new DroneCommand(
@@ -233,7 +240,28 @@ public sealed class HttpDroneCommandClient(
             GetDate(element, "firstNotifiedAt"),
             GetDate(element, "postponeDeadlineAt"),
             GetDate(element, "scheduledFor"),
-            package);
+            packages);
+    }
+
+    private static DroneCommandPackage? ParsePackage(JsonElement packageElement)
+    {
+        if (packageElement.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return new DroneCommandPackage(
+            packageElement.TryGetProperty("id", out JsonElement pkgId) && pkgId.TryGetInt64(out long pid)
+                ? pid
+                : 0,
+            GetString(packageElement, "name") ?? "Package",
+            GetString(packageElement, "source") ?? string.Empty,
+            GetString(packageElement, "msiUrl"),
+            GetString(packageElement, "msiArgs"),
+            GetString(packageElement, "wingetId"),
+            GetString(packageElement, "chocoId"),
+            GetString(packageElement, "silentArgs"),
+            GetString(packageElement, "sha256"));
     }
 
     private static string? GetString(JsonElement element, string name) =>

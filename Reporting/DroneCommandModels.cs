@@ -22,7 +22,10 @@ public sealed record DroneCommand(
     DateTimeOffset? FirstNotifiedAt,
     DateTimeOffset? PostponeDeadlineAt,
     DateTimeOffset? ScheduledFor,
-    DroneCommandPackage? Package);
+    IReadOnlyList<DroneCommandPackage> Packages)
+{
+    public DroneCommandPackage? Package => Packages.Count > 0 ? Packages[0] : null;
+}
 
 public sealed record DroneCommandStatusUpdate(
     string Status,

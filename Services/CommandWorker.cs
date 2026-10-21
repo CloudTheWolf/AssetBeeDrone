@@ -80,7 +80,7 @@ public sealed class CommandWorker(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (command.Package is null)
+        if (command.Packages.Count == 0)
         {
             await commandClient.ReportStatusAsync(
                 command.Id,
@@ -89,7 +89,7 @@ public sealed class CommandWorker(
             return;
         }
 
-        DateTimeOffset? deadline = command.PostponeDeadlineAt;
+        DateTimeOffset? postponeDeadline = command.PostponeDeadlineAt;
         if (string.Equals(command.Status, "scheduled", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(command.Status, "postponed", StringComparison.OrdinalIgnoreCase))
         {
@@ -99,10 +99,10 @@ public sealed class CommandWorker(
                 return;
             }
 
-            if (deadline is not null && deadline <= now)
+            if (postponeDeadline is not null && postponeDeadline <= now)
             {
                 logger.LogInformation(
-                    "Install deadline reached for target {TargetId}; running automatically",
+                    "Install postpone deadline reached for target {TargetId}; running automatically",
                     command.Id);
                 await RunInstallAsync(command, cancellationToken);
                 return;
@@ -112,23 +112,22 @@ public sealed class CommandWorker(
             return;
         }
 
-        if (deadline is not null && deadline <= now &&
-            !_awaitingUser.Contains(command.Id))
-        {
-            await RunInstallAsync(command, cancellationToken);
-            return;
-        }
-
         if (_awaitingUser.Contains(command.Id) ||
             string.Equals(command.Status, "awaiting_user", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(command.Status, "delivered", StringComparison.OrdinalIgnoreCase))
         {
-            EnsurePendingNotice(command);
-            if (deadline is not null && deadline <= now)
+            if (RemoteInstallTiming.ShouldInstallAfterNoResponse(now, command.FirstNotifiedAt) ||
+                (postponeDeadline is not null && postponeDeadline <= now))
             {
+                logger.LogInformation(
+                    "No user response within {Minutes} minutes for target {TargetId}; installing automatically",
+                    RemoteInstallTiming.NoResponseAutoInstallDelay.TotalMinutes,
+                    command.Id);
                 await RunInstallAsync(command, cancellationToken);
+                return;
             }
 
+            EnsurePendingNotice(command);
             return;
         }
 
@@ -143,18 +142,34 @@ public sealed class CommandWorker(
     private void EnsurePendingNotice(DroneCommand command)
     {
         PendingRemoteInstall? existing = RemoteInstallIpc.ReadPending();
-        if (existing?.TargetId == command.Id)
+        DateTimeOffset now = timeProvider.GetUtcNow();
+        DateTimeOffset? autoInstallAt =
+            RemoteInstallTiming.NoResponseAutoInstallAt(command.FirstNotifiedAt) ??
+            now.Add(RemoteInstallTiming.NoResponseAutoInstallDelay);
+
+        if (existing?.TargetId == command.Id &&
+            existing.AutoInstallAtUtc == autoInstallAt &&
+            existing.PostponeDeadlineAt == command.PostponeDeadlineAt &&
+            existing.ScheduledFor == command.ScheduledFor)
         {
             return;
         }
 
+        string packageLabel = command.Packages.Count switch
+        {
+            0 => "Package",
+            1 => command.Packages[0].Name,
+            _ => $"{command.Packages[0].Name} +{command.Packages.Count - 1} more"
+        };
+
         RemoteInstallIpc.WritePending(new PendingRemoteInstall(
             command.Id,
-            command.Package?.Name ?? "Package",
+            packageLabel,
             command.Package?.Source ?? string.Empty,
             command.PostponeDeadlineAt,
             command.ScheduledFor,
-            timeProvider.GetUtcNow()));
+            now,
+            autoInstallAt));
     }
 
     private async Task ProcessDecisionAsync(CancellationToken cancellationToken)
@@ -182,7 +197,7 @@ public sealed class CommandWorker(
                         null,
                         null,
                         null,
-                        null),
+                        []),
                     cancellationToken);
                 break;
             case "postpone":
@@ -220,7 +235,7 @@ public sealed class CommandWorker(
             return;
         }
 
-        if (verified.Package is null)
+        if (verified.Packages.Count == 0)
         {
             await commandClient.ReportStatusAsync(
                 verified.Id,
@@ -236,22 +251,41 @@ public sealed class CommandWorker(
             new DroneCommandStatusUpdate("running"),
             cancellationToken);
 
-        logger.LogInformation(
-            "Installing remote package {Package} for target {TargetId}",
-            verified.Package.Name,
-            verified.Id);
+        List<PackageInstallItemResult> packageResults = [];
+        bool allSucceeded = true;
+        string? firstError = null;
 
-        PackageInstallResult result =
-            await packageInstaller.InstallAsync(verified.Package, cancellationToken);
+        foreach (DroneCommandPackage package in verified.Packages)
+        {
+            logger.LogInformation(
+                "Installing remote package {Package} for target {TargetId}",
+                package.Name,
+                verified.Id);
+
+            PackageInstallResult result =
+                await packageInstaller.InstallAsync(package, cancellationToken);
+            packageResults.Add(new PackageInstallItemResult(
+                package.Name,
+                result.Succeeded,
+                result.ExitCode,
+                result.Message));
+
+            if (!result.Succeeded)
+            {
+                allSucceeded = false;
+                firstError ??= result.Message ?? $"Install failed for {package.Name}.";
+                break;
+            }
+        }
 
         await commandClient.ReportStatusAsync(
             verified.Id,
             new DroneCommandStatusUpdate(
-                result.Succeeded ? "succeeded" : "failed",
+                allSucceeded ? "succeeded" : "failed",
                 Result: JsonSerializer.SerializeToElement(
-                    new PackageInstallStatusResult(result.ExitCode, result.Message),
-                    DroneCommandJsonContext.Default.PackageInstallStatusResult),
-                Error: result.Succeeded ? null : result.Message),
+                    new MultiPackageInstallStatusResult(allSucceeded, packageResults),
+                    DroneCommandJsonContext.Default.MultiPackageInstallStatusResult),
+                Error: firstError),
             cancellationToken);
     }
 

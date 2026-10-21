@@ -26,7 +26,21 @@ public sealed class DroneCommandClientTests
                     "name": "GCPW",
                     "source": "winget",
                     "wingetId": "Google.GCPW"
-                  }
+                  },
+                  "packages": [
+                    {
+                      "id": 2,
+                      "name": "GCPW",
+                      "source": "winget",
+                      "wingetId": "Google.GCPW"
+                    },
+                    {
+                      "id": 3,
+                      "name": "Chrome",
+                      "source": "winget",
+                      "wingetId": "Google.Chrome"
+                    }
+                  ]
                 }
               ],
               "hardwareId": 1
@@ -49,10 +63,54 @@ public sealed class DroneCommandClientTests
         Assert.Single(commands);
         Assert.Equal(9, commands[0].Id);
         Assert.True(commands[0].RequiresUserConsent);
+        Assert.Equal(2, commands[0].Packages.Count);
         Assert.Equal("GCPW", commands[0].Package!.Name);
+        Assert.Equal("Chrome", commands[0].Packages[1].Name);
         Assert.Equal(HttpMethod.Get, handler.Method);
         Assert.Contains("serialNumber=SN-1", handler.RequestUri!.Query, StringComparison.Ordinal);
         Assert.Contains("drone/commands", handler.RequestUri.AbsolutePath, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ListCommandsAsync_falls_back_to_legacy_package()
+    {
+        const string body = """
+            {
+              "data": [
+                {
+                  "id": 9,
+                  "pushId": 3,
+                  "type": "install_package",
+                  "status": "pending",
+                  "requiresUserConsent": true,
+                  "package": {
+                    "id": 2,
+                    "name": "GCPW",
+                    "source": "winget",
+                    "wingetId": "Google.GCPW"
+                  }
+                }
+              ],
+              "hardwareId": 1
+            }
+            """;
+        CommandHandler handler = new(HttpStatusCode.OK, body);
+        using HttpClient client = new(handler);
+        HttpDroneCommandClient commandClient = new(
+            client,
+            Options.Create(new DroneOptions
+            {
+                Endpoint = new Uri("https://inventory.example.test/api/v1/inventory"),
+                ApiKey = "secret"
+            }),
+            NullLogger<HttpDroneCommandClient>.Instance);
+
+        IReadOnlyList<DroneCommand> commands =
+            await commandClient.ListCommandsAsync("SN-1", null, CancellationToken.None);
+
+        Assert.Single(commands);
+        Assert.Single(commands[0].Packages);
+        Assert.Equal("GCPW", commands[0].Packages[0].Name);
     }
 
     [Fact]

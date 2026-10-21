@@ -8,7 +8,8 @@ public sealed record PendingRemoteInstall(
     string Source,
     DateTimeOffset? PostponeDeadlineAt,
     DateTimeOffset? ScheduledFor,
-    DateTimeOffset WrittenAtUtc);
+    DateTimeOffset WrittenAtUtc,
+    DateTimeOffset? AutoInstallAtUtc = null);
 
 public sealed record RemoteInstallUserDecision(
     long TargetId,

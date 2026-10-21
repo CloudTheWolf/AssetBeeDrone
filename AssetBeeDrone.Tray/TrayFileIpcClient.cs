@@ -127,7 +127,8 @@ internal sealed record TrayPendingInstall(
     string Source,
     DateTimeOffset? PostponeDeadlineAt,
     DateTimeOffset? ScheduledFor,
-    DateTimeOffset WrittenAtUtc);
+    DateTimeOffset WrittenAtUtc,
+    DateTimeOffset? AutoInstallAtUtc = null);
 
 internal sealed record TrayInstallDecision(
     long TargetId,

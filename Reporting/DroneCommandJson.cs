@@ -13,6 +13,12 @@ public sealed record DroneCommandStatusRequest(
 
 public sealed record PackageInstallStatusResult(int? ExitCode, string? Message);
 
+public sealed record PackageInstallItemResult(string Name, bool Succeeded, int? ExitCode, string? Message);
+
+public sealed record MultiPackageInstallStatusResult(
+    bool Succeeded,
+    IReadOnlyList<PackageInstallItemResult> Packages);
+
 public sealed record ProbeUnavailableResult(string Status, string? Detail);
 
 public sealed record BitLockerVolumeStatusResult(
@@ -44,6 +50,9 @@ public sealed record UnsupportedCommandResult(string Detail);
 [JsonSerializable(typeof(DroneDeviceIdentityRequest))]
 [JsonSerializable(typeof(DroneCommandStatusRequest))]
 [JsonSerializable(typeof(PackageInstallStatusResult))]
+[JsonSerializable(typeof(PackageInstallItemResult))]
+[JsonSerializable(typeof(MultiPackageInstallStatusResult))]
+[JsonSerializable(typeof(IReadOnlyList<PackageInstallItemResult>))]
 [JsonSerializable(typeof(ProbeUnavailableResult))]
 [JsonSerializable(typeof(BitLockerVolumeStatusResult))]
 [JsonSerializable(typeof(BitLockerStatusResult))]

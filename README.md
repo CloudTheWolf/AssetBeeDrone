@@ -147,8 +147,10 @@ curated package installs. Before any probe or install runs, Drone calls
 only proceeds when AssetBee confirms the target is still open, assigned to this
 hardware, and returns a fresh command payload. BitLocker / Windows Update
 probes run silently. Installs notify the tray user, who may install now,
-postpone, or schedule a time within 24 hours of first notice; after the
-deadline the service installs automatically. Status is reported via
+postpone, or schedule a time within 24 hours of first notice. If the user
+does not respond within 15 minutes of first notice, the service installs
+automatically; postponed/scheduled installs also run when their time (or the
+24-hour hard deadline) is reached. Status is reported via
 `POST /api/v1/drone/commands/{id}/status`.
 
 ## Build and test
