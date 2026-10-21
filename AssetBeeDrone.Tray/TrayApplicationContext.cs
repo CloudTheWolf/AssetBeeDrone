@@ -9,6 +9,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// <summary>
     /// Ignore QuitTray/Installing right after start so a stale status.json from the
     /// previous instance (or mid-update) does not immediately exit the new tray.
+    /// ...
     /// </summary>
     private static readonly TimeSpan QuitGracePeriod = TimeSpan.FromSeconds(15);
 
