@@ -66,10 +66,9 @@ to poll the feed immediately; **About** shows service and tray versions. The
 tray **Install Update** item remains available if an automatic install fails
 and needs a retry.
 
-The production feed depends on how you build:
-
-- **GitHub Actions** (tagged releases): `https://assetbee.software/drone/latest.json`
-- **Jenkins** (lab): `https://assets.callcorplab.com/drone/latest.json`
+The production feed for tagged GitHub Actions releases is
+`https://assetbee.software/drone/latest.json`. Other CI pipelines can bake a
+different feed with `-p:UpdateFeedUrl=...`.
 
 Disable at runtime with `Drone__AutoUpdate=false`, or change the
 check interval with `Drone__AutoUpdateIntervalHours` (1–168, default 1).
@@ -189,9 +188,9 @@ also creates a GitHub Release from those artifacts. Release assets are
 **Sigstore/Cosign keyless-signed** (OIDC via GitHub Actions); each package ships
 with a `.sigstore.json` bundle plus a signed `SHA256SUMS`. Tagged releases also
 include `latest.json` with download URLs under `https://assetbee.software/drone`,
-and binaries bake `UpdateFeedUrl` to that host’s `latest.json`. Jenkins lab
-builds use `https://assets.callcorplab.com/drone` instead and perform
-Authenticode / Developer ID signing (and optional notarization)—not Sigstore.
+and binaries bake `UpdateFeedUrl` to that host’s `latest.json`. Alternative CI
+pipelines can publish to a private feed and perform Authenticode / Developer ID
+signing (and optional notarization)—not Sigstore.
 
 Verify a downloaded GitHub Release asset (replace `OWNER/REPO` and the tag):
 
