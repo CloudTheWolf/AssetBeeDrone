@@ -99,6 +99,10 @@ install -m 0644 "$linux_dir/environment.example" "$payload/etc/assetbee-drone/en
 tar -C "$work/SOURCES" -czf "$work/SOURCES/assetbee-drone-$version.tar.gz" "assetbee-drone-$version"
 
 cat >"$work/SPECS/assetbee-drone.spec" <<EOF
+# Native AOT publish output has no useful separate debuginfo; skip find-debuginfo
+# so packaging works on hosts without elfutils/eu-strip (e.g. Ubuntu 26.04 CI).
+%global debug_package %{nil}
+
 Name:           assetbee-drone
 Version:        $version
 Release:        1%{?dist}
@@ -152,6 +156,7 @@ EOF
 rpmbuild \
   --define "_topdir $work" \
   --define "_build_id_links none" \
+  --define "debug_package %{nil}" \
   --target "$arch" \
   -bb "$work/SPECS/assetbee-drone.spec"
 
