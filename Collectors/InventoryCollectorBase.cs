@@ -119,4 +119,37 @@ public abstract class InventoryCollectorBase
 
         return null;
     }
+
+    /// <summary>
+    /// Rejects blank OEM/firmware placeholder strings that are not useful as
+    /// stable hardware identifiers.
+    /// </summary>
+    protected static bool IsMeaningfulHardwareValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string normalized = value.Trim();
+        string[] placeholders =
+        [
+            "none", "null", "n/a", "na", "not specified", "not applicable",
+            "default string", "to be filled by o.e.m.", "to be filled by oem",
+            "system serial number", "system product name", "system manufacturer",
+            "chassis serial number", "invalid", "unknown", "undefined", "o.e.m.",
+            "0",
+        ];
+        return !placeholders.Any(placeholder =>
+            normalized.Equals(placeholder, StringComparison.OrdinalIgnoreCase));
+    }
+
+    protected static ProbeValue<string> AvailableHardwareSerial(
+        string? value,
+        string unavailableDetail)
+    {
+        return IsMeaningfulHardwareValue(value)
+            ? ProbeValue<string>.Available(value!.Trim())
+            : ProbeValue<string>.Unavailable(unavailableDetail);
+    }
 }

@@ -203,25 +203,6 @@ public sealed partial class LinuxInventoryCollector(
         return null;
     }
 
-    private static bool IsMeaningfulHardwareValue(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-
-        string normalized = value.Trim();
-        string[] placeholders =
-        [
-            "none", "null", "n/a", "na", "not specified", "not applicable",
-            "default string", "to be filled by o.e.m.", "to be filled by oem",
-            "system serial number", "system product name", "system manufacturer",
-            "chassis serial number", "invalid", "unknown", "undefined", "o.e.m."
-        ];
-        return !placeholders.Any(placeholder =>
-            normalized.Equals(placeholder, StringComparison.OrdinalIgnoreCase));
-    }
-
     private async Task<ProbeValue<OperatingSystemInfo>> CollectOperatingSystemAsync(
         CancellationToken cancellationToken)
     {

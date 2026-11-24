@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using AssetBeeDrone.Collectors.Linux;
 using AssetBeeDrone.Collectors.MacOS;
 using AssetBeeDrone.Collectors.Windows;
@@ -101,6 +103,55 @@ public sealed class CollectorTests
         Assert.Equal("CycloneDX", inventory.Sbom.Value!.Format);
         Assert.Contains(inventory.Sbom.Value.Targets.Single(target => target.Kind == "host").Components,
             component => component.Name == "Example.Package" && component.Version == "1.2.3");
+    }
+
+    [Fact]
+    public async Task Windows_collector_treats_placeholder_serial_as_unavailable()
+    {
+        string fixture = await ReadFixtureAsync("windows-inventory.json");
+        using JsonDocument document = JsonDocument.Parse(fixture);
+        using MemoryStream stream = new();
+        await using (Utf8JsonWriter writer = new(stream))
+        {
+            writer.WriteStartObject();
+            foreach (JsonProperty property in document.RootElement.EnumerateObject())
+            {
+                if (property.NameEquals("SerialNumber"))
+                {
+                    writer.WriteString("SerialNumber", "To Be Filled By O.E.M.");
+                    continue;
+                }
+
+                property.WriteTo(writer);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        string placeholderFixture = Encoding.UTF8.GetString(stream.ToArray());
+        FakeProcessRunner runner = new((file, arguments) =>
+        {
+            if (file != "powershell.exe")
+            {
+                return Missing(file);
+            }
+
+            string command = string.Join(' ', arguments);
+            if (command.Contains("Uninstall", StringComparison.Ordinal) ||
+                command.Contains("Get-AppxPackage", StringComparison.Ordinal))
+            {
+                return new ProcessResult(0, "[]", string.Empty);
+            }
+
+            return new ProcessResult(0, placeholderFixture, string.Empty);
+        });
+
+        DeviceInventory inventory =
+            await new WindowsInventoryCollector(runner, TimeProvider.System, DefaultOptions)
+                .CollectAsync(CancellationToken.None);
+
+        Assert.Equal(ProbeStatus.Unavailable, inventory.SerialNumber.Status);
+        Assert.Equal("WIN-TEST", inventory.DeviceName.Value);
     }
 
     [Fact]

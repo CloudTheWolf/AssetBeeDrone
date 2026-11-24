@@ -46,7 +46,9 @@ public sealed partial class WindowsInventoryCollector(
                 timeProvider.GetUtcNow(),
                 "windows",
                 AvailableString(root, "DeviceName"),
-                AvailableString(root, "SerialNumber"),
+                AvailableHardwareSerial(
+                    GetString(root, "SerialNumber"),
+                    "No BIOS, board, product, or machine serial was available."),
                 AvailableCamelCaseIdentifier(
                     GetString(root, "SystemManufacturer"),
                     "System manufacturer was not returned."),
@@ -389,6 +391,46 @@ public sealed partial class WindowsInventoryCollector(
         $bios = Get-CimInstance Win32_BIOS
         $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
         $computer = Get-CimInstance Win32_ComputerSystem
+        $product = $null
+        $board = $null
+        try { $product = Get-CimInstance Win32_ComputerSystemProduct -ErrorAction Stop } catch {}
+        try { $board = Get-CimInstance Win32_BaseBoard -ErrorAction Stop } catch {}
+        $machineGuid = $null
+        try {
+            $machineGuid = [string](Get-ItemProperty `
+                -Path 'HKLM:\SOFTWARE\Microsoft\Cryptography' `
+                -Name MachineGuid `
+                -ErrorAction Stop).MachineGuid
+        } catch {}
+        function Get-MeaningfulHardwareValue {
+            param([string[]]$Candidates)
+            $placeholders = @(
+                'none', 'null', 'n/a', 'na', 'not specified', 'not applicable',
+                'default string', 'to be filled by o.e.m.', 'to be filled by oem',
+                'system serial number', 'system product name', 'system manufacturer',
+                'chassis serial number', 'invalid', 'unknown', 'undefined', 'o.e.m.', '0'
+            )
+            foreach ($candidate in $Candidates) {
+                if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+                $normalized = $candidate.Trim()
+                $isPlaceholder = $false
+                foreach ($placeholder in $placeholders) {
+                    if ($normalized.Equals($placeholder, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $isPlaceholder = $true
+                        break
+                    }
+                }
+                if (-not $isPlaceholder) { return $normalized }
+            }
+            return $null
+        }
+        $serialNumber = Get-MeaningfulHardwareValue @(
+            [string]$bios.SerialNumber,
+            $(if ($null -ne $product) { [string]$product.IdentifyingNumber } else { $null }),
+            $(if ($null -ne $board) { [string]$board.SerialNumber } else { $null }),
+            $(if ($null -ne $product) { [string]$product.UUID } else { $null }),
+            $machineGuid
+        )
         $disks = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object {
             [pscustomobject]@{
                 DeviceId = $_.DeviceID
@@ -606,7 +648,7 @@ public sealed partial class WindowsInventoryCollector(
         } catch {}
         [pscustomobject]@{
             DeviceName = $env:COMPUTERNAME
-            SerialNumber = $bios.SerialNumber
+            SerialNumber = $serialNumber
             SystemManufacturer = [string]$computer.Manufacturer
             SystemSku = [string]$computer.SystemSKUNumber
             SystemModel = [string]$computer.Model
