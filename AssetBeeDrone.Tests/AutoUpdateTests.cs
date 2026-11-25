@@ -205,6 +205,39 @@ public sealed class AutoUpdateTests
     }
 
     [Fact]
+    public void ResolveUpdateWorkDirectory_uses_persistent_linux_state_path()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        string directory = UpdateApplier.ResolveUpdateWorkDirectory("1.2.3");
+        Assert.Equal(
+            Path.Combine(UpdateApplier.LinuxUpdateRoot, "1.2.3"),
+            directory);
+    }
+
+    [Fact]
+    public void BuildSystemdRunInstallArguments_escapes_service_cgroup()
+    {
+        string[] args = UpdateApplier.BuildSystemdRunInstallArguments(
+            "dpkg",
+            "-i",
+            "/var/lib/assetbee-drone/updates/1.2.3/pkg.deb");
+
+        Assert.Equal(
+            [
+                "--collect",
+                "--no-block",
+                "dpkg",
+                "-i",
+                "/var/lib/assetbee-drone/updates/1.2.3/pkg.deb"
+            ],
+            args);
+    }
+
+    [Fact]
     public void Configuration_rejects_invalid_auto_update_interval()
     {
         DroneOptionsValidator validator = new();

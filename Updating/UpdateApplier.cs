@@ -24,6 +24,12 @@ public sealed class UpdateApplier(
 {
     public const string HttpClientName = "AssetBeeDrone.AutoUpdate.Download";
 
+    /// <summary>
+    /// Linux StateDirectory path used for update payloads. Must not use the service's
+    /// PrivateTmp, or the .deb disappears when systemd stops the unit mid-upgrade.
+    /// </summary>
+    internal const string LinuxUpdateRoot = "/var/lib/assetbee-drone/updates";
+
     public async Task ApplyAsync(
         UpdateManifest manifest,
         UpdatePackage package,
@@ -39,11 +45,7 @@ public sealed class UpdateApplier(
         CancellationToken cancellationToken)
     {
         Uri downloadUri = ResolvePackageUri(manifest, package);
-        string workDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "AssetBeeDrone",
-            "updates",
-            manifest.Version);
+        string workDirectory = ResolveUpdateWorkDirectory(manifest.Version);
         Directory.CreateDirectory(workDirectory);
         string packagePath = Path.Combine(workDirectory, package.FileName);
 
@@ -87,6 +89,42 @@ public sealed class UpdateApplier(
         string feedUrl = BuildConstants.UpdateFeedUrl;
         Uri manifestUri = UpdateFeedClient.ResolveManifestUri(feedUrl);
         return new Uri(manifestUri, package.FileName);
+    }
+
+    /// <summary>
+    /// Directory for a verified update payload that must outlive this process.
+    /// On Linux the service uses PrivateTmp, so Path.GetTempPath() is wiped on stop.
+    /// </summary>
+    internal static string ResolveUpdateWorkDirectory(string version)
+    {
+        string root;
+        if (OperatingSystem.IsLinux())
+        {
+            root = LinuxUpdateRoot;
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            root = Path.Combine("/var/tmp", "assetbee-drone", "updates");
+        }
+        else
+        {
+            root = Path.Combine(Path.GetTempPath(), "AssetBeeDrone", "updates");
+        }
+
+        return Path.Combine(root, version);
+    }
+
+    /// <summary>
+    /// Builds argv for a transient systemd unit that runs outside this service's cgroup.
+    /// Without that escape, prerm's <c>systemctl stop</c> kills dpkg/rpm mid-transaction and
+    /// leaves the package in reinst-required (breaking subsequent apt installs).
+    /// </summary>
+    internal static string[] BuildSystemdRunInstallArguments(string fileName, params string[] installArguments)
+    {
+        // --no-block: return immediately so this service can stop.
+        // --collect: drop the transient unit after it finishes.
+        string[] prefix = ["--collect", "--no-block", fileName];
+        return [.. prefix, .. installArguments];
     }
 
     private async Task DownloadAsync(
@@ -140,7 +178,7 @@ public sealed class UpdateApplier(
         if (extension.Equals(".msi", StringComparison.OrdinalIgnoreCase))
         {
             // Detach so msiexec can stop/replace this Windows Service.
-            StartDetached("msiexec", $"/i \"{packagePath}\" /qn /norestart");
+            StartDetached("msiexec", [$"/i", packagePath, "/qn", "/norestart"]);
             return;
         }
 
@@ -157,28 +195,38 @@ public sealed class UpdateApplier(
 
         if (extension.Equals(".deb", StringComparison.OrdinalIgnoreCase))
         {
-            ProcessResult result = await processRunner.RunAsync(
-                "dpkg",
-                ["-i", packagePath],
-                TimeSpan.FromMinutes(15),
-                cancellationToken);
-            EnsureSucceeded("dpkg", result);
+            // Must leave the service cgroup: prerm stops this unit and would kill an in-cgroup dpkg.
+            StartLinuxPackageInstall("dpkg", ["-i", packagePath]);
             return;
         }
 
         if (extension.Equals(".rpm", StringComparison.OrdinalIgnoreCase))
         {
-            ProcessResult result = await processRunner.RunAsync(
-                "rpm",
-                ["-Uvh", packagePath],
-                TimeSpan.FromMinutes(15),
-                cancellationToken);
-            EnsureSucceeded("rpm", result);
+            StartLinuxPackageInstall("rpm", ["-Uvh", packagePath]);
             return;
         }
 
         throw new PlatformNotSupportedException(
             $"Unsupported update package type: {extension}");
+    }
+
+    private void StartLinuxPackageInstall(string packageManager, IReadOnlyList<string> arguments)
+    {
+        if (HasExecutable("systemd-run"))
+        {
+            StartDetached(
+                "systemd-run",
+                BuildSystemdRunInstallArguments(packageManager, [.. arguments]));
+            return;
+        }
+
+        // Last resort: still detach from this process tree. Without systemd-run the
+        // package manager may remain in the service cgroup and get killed on stop.
+        logger.LogWarning(
+            "systemd-run not found; starting {PackageManager} in-process cgroup. " +
+            "Self-update may leave the package broken if the service is stopped mid-install.",
+            packageManager);
+        StartDetached(packageManager, arguments);
     }
 
     private static void EnsureSucceeded(string tool, ProcessResult result)
@@ -195,16 +243,44 @@ public sealed class UpdateApplier(
             $"{tool} failed with exit code {result.ExitCode}: {detail.Trim()}");
     }
 
-    private static void StartDetached(string fileName, string arguments)
+    private static bool HasExecutable(string name)
+    {
+        if (Path.IsPathRooted(name) && File.Exists(name))
+        {
+            return true;
+        }
+
+        string? pathEnv = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(pathEnv))
+        {
+            return false;
+        }
+
+        foreach (string directory in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            string candidate = Path.Combine(directory, name);
+            if (File.Exists(candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void StartDetached(string fileName, IReadOnlyList<string> arguments)
     {
         using Process process = new();
         process.StartInfo = new ProcessStartInfo
         {
             FileName = fileName,
-            Arguments = arguments,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        foreach (string argument in arguments)
+        {
+            process.StartInfo.ArgumentList.Add(argument);
+        }
 
         if (!process.Start())
         {
